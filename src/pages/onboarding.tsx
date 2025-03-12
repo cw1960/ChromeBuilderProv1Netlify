@@ -80,6 +80,35 @@ export default function Onboarding() {
       // Store API key in localStorage
       localStorage.setItem('claude_api_key', apiKey);
       
+      // Special handling for test user in development
+      const isTestUser = session.user.id === 'test-user-id';
+      if (isTestUser) {
+        console.log('Using test user mode for development');
+        
+        // For test user, we'll just store the data in session storage
+        const testUserData = {
+          id: session.user.id,
+          name: firstName,
+          dev_experience: experience,
+          onboarding_completed: true
+        };
+        
+        // Store in sessionStorage for persistence during the session
+        sessionStorage.setItem('test_user_metadata', JSON.stringify(testUserData));
+        
+        console.log('Test user data saved in session storage:', testUserData);
+        
+        // Show success message
+        setShowSuccess(true);
+        
+        // Redirect to dashboard after 1.5 seconds
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+        
+        return;
+      }
+      
       // Get the Supabase access token from the session
       const supabaseAccessToken = session.supabaseAccessToken;
       console.log('Supabase access token available:', !!supabaseAccessToken);
@@ -224,16 +253,28 @@ export default function Onboarding() {
 
           {/* Debug info - only shown in development */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-md text-xs overflow-auto max-h-40">
-              <h3 className="font-bold mb-2">Debug Info:</h3>
-              <p>Auth Status: {status}</p>
-              <p>Session Available: {session ? 'Yes' : 'No'}</p>
-              <p>User ID: {session?.user?.id || 'Not available'}</p>
-              <p>Supabase Token: {session?.supabaseAccessToken ? 'Available' : 'Not available'}</p>
-              <details>
-                <summary>Session Data</summary>
-                <pre>{JSON.stringify(session, null, 2)}</pre>
-              </details>
+            <div className="mt-8 p-4 bg-gray-100 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">Debug Information</h3>
+              <div className="space-y-2 text-sm">
+                <p>Auth Status: {status}</p>
+                <p>Session Available: {!!session}</p>
+                <p>User ID: {session?.user?.id || 'Not available'}</p>
+                <p>Supabase Token: {!!session?.supabaseAccessToken ? 'Available' : 'Not available'}</p>
+                {session?.user?.id === 'test-user-id' && (
+                  <>
+                    <p className="font-semibold mt-4">Test User Data:</p>
+                    <pre className="bg-white p-2 rounded">
+                      {JSON.stringify(JSON.parse(sessionStorage.getItem('test_user_metadata') || '{}'), null, 2)}
+                    </pre>
+                  </>
+                )}
+                <details className="mt-4">
+                  <summary>Session Data</summary>
+                  <pre className="bg-white p-2 rounded mt-2">
+                    {JSON.stringify(session, null, 2)}
+                  </pre>
+                </details>
+              </div>
             </div>
           )}
 
