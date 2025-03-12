@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, getSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { supabase } from '@/lib/supabase';
+import { supabase, createSupabaseClient } from '@/lib/supabase';
 
 // UI Components
 import { Button } from '@/components/ui';
@@ -48,6 +48,13 @@ export default function Onboarding() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Check for session
+    if (!session || !session.user || !session.user.id) {
+      setError('Auth session missing! Please sign in again.');
+      console.error('Session data:', session);
+      return;
+    }
+    
     // Validate form
     if (!firstName.trim()) {
       setError('Please enter your first name');
@@ -68,12 +75,30 @@ export default function Onboarding() {
     setError('');
     
     try {
+      console.log('Saving onboarding data for user:', session.user.id);
+      
       // Store API key in localStorage
       localStorage.setItem('claude_api_key', apiKey);
       
-      // Update user metadata in Supabase
-      if (session?.user?.id) {
-        const { error: updateError } = await supabase.auth.updateUser({
+      // Get the Supabase access token from the session
+      const supabaseAccessToken = session.supabaseAccessToken;
+      console.log('Supabase access token available:', !!supabaseAccessToken);
+      
+      let updateSuccess = false;
+      
+      // Try to update user metadata using Supabase client
+      try {
+        // Use the appropriate Supabase client
+        let client = supabase;
+        if (supabaseAccessToken) {
+          client = createSupabaseClient(supabaseAccessToken);
+          console.log('Using authenticated Supabase client');
+        } else {
+          console.log('Using anonymous Supabase client');
+        }
+        
+        // Update user metadata in Supabase
+        const { data: userData, error: updateError } = await client.auth.updateUser({
           data: {
             name: firstName,
             dev_experience: experience,
@@ -82,8 +107,50 @@ export default function Onboarding() {
         });
         
         if (updateError) {
-          throw new Error(updateError.message);
+          console.error('Supabase client update error:', updateError);
+          // Don't throw, we'll try the API route fallback
+        } else {
+          console.log('User data updated successfully via client:', userData);
+          updateSuccess = true;
         }
+      } catch (clientError) {
+        console.error('Error using Supabase client:', clientError);
+        // Continue to fallback
+      }
+      
+      // If client-side update failed, try using a server-side API route
+      if (!updateSuccess) {
+        console.log('Trying server-side update fallback');
+        
+        // Create a server-side API route to update user metadata
+        const response = await fetch('/api/update-user-metadata', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: session.user.id,
+            metadata: {
+              name: firstName,
+              dev_experience: experience,
+              onboarding_completed: true,
+            },
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Server-side update error:', errorData);
+          throw new Error(errorData.message || 'Failed to update user metadata');
+        }
+        
+        const data = await response.json();
+        console.log('User data updated successfully via API:', data);
+        updateSuccess = true;
+      }
+      
+      if (!updateSuccess) {
+        throw new Error('Failed to update user metadata through all available methods');
       }
       
       // Show success message
@@ -135,12 +202,38 @@ export default function Onboarding() {
           {error && (
             <div className="rounded-md bg-red-50 p-4 text-red-800 dark:bg-red-900/50 dark:text-red-300">
               <p>{error}</p>
+              {error.includes('Auth session') && (
+                <div className="mt-2 text-sm">
+                  <p>Try refreshing the page or signing in again.</p>
+                  <button 
+                    onClick={() => router.push('/auth/signin')}
+                    className="mt-2 text-red-600 dark:text-red-400 underline"
+                  >
+                    Go to Sign In
+                  </button>
+                </div>
+              )}
             </div>
           )}
           
           {showSuccess && (
             <div className="rounded-md bg-green-50 p-4 text-green-800 dark:bg-green-900/50 dark:text-green-300">
               <p>Setup complete! Redirecting to dashboard...</p>
+            </div>
+          )}
+
+          {/* Debug info - only shown in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-md text-xs overflow-auto max-h-40">
+              <h3 className="font-bold mb-2">Debug Info:</h3>
+              <p>Auth Status: {status}</p>
+              <p>Session Available: {session ? 'Yes' : 'No'}</p>
+              <p>User ID: {session?.user?.id || 'Not available'}</p>
+              <p>Supabase Token: {session?.supabaseAccessToken ? 'Available' : 'Not available'}</p>
+              <details>
+                <summary>Session Data</summary>
+                <pre>{JSON.stringify(session, null, 2)}</pre>
+              </details>
             </div>
           )}
 
