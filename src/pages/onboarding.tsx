@@ -80,40 +80,12 @@ export default function Onboarding() {
       // Store API key in localStorage
       localStorage.setItem('claude_api_key', apiKey);
       
-      // Special handling for test user in development
-      const isTestUser = session.user.id === 'test-user-id';
-      if (isTestUser) {
-        console.log('Using test user mode for development');
-        
-        // For test user, we'll just store the data in session storage
-        const testUserData = {
-          id: session.user.id,
-          name: firstName,
-          dev_experience: experience,
-          onboarding_completed: true
-        };
-        
-        // Store in sessionStorage for persistence during the session
-        sessionStorage.setItem('test_user_metadata', JSON.stringify(testUserData));
-        
-        console.log('Test user data saved in session storage:', testUserData);
-        
-        // Show success message
-        setShowSuccess(true);
-        
-        // Redirect to dashboard after 1.5 seconds
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 1500);
-        
-        return;
-      }
-      
       // Get the Supabase access token from the session
       const supabaseAccessToken = session.supabaseAccessToken;
       console.log('Supabase access token available:', !!supabaseAccessToken);
       
       let updateSuccess = false;
+      let updateError = null;
       
       // Try to update user metadata using Supabase client
       try {
@@ -127,7 +99,7 @@ export default function Onboarding() {
         }
         
         // Update user metadata in Supabase
-        const { data: userData, error: updateError } = await client.auth.updateUser({
+        const { data: userData, error: clientError } = await client.auth.updateUser({
           data: {
             name: firstName,
             dev_experience: experience,
@@ -135,51 +107,64 @@ export default function Onboarding() {
           }
         });
         
-        if (updateError) {
-          console.error('Supabase client update error:', updateError);
-          // Don't throw, we'll try the API route fallback
+        if (clientError) {
+          console.error('Supabase client update error:', clientError);
+          updateError = clientError;
         } else {
           console.log('User data updated successfully via client:', userData);
           updateSuccess = true;
         }
       } catch (clientError) {
         console.error('Error using Supabase client:', clientError);
-        // Continue to fallback
+        updateError = clientError;
       }
       
       // If client-side update failed, try using a server-side API route
       if (!updateSuccess) {
         console.log('Trying server-side update fallback');
         
-        // Create a server-side API route to update user metadata
-        const response = await fetch('/api/update-user-metadata', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: session.user.id,
-            metadata: {
-              name: firstName,
-              dev_experience: experience,
-              onboarding_completed: true,
+        try {
+          const response = await fetch('/api/update-user-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
             },
-          }),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Server-side update error:', errorData);
-          throw new Error(errorData.message || 'Failed to update user metadata');
+            body: JSON.stringify({
+              userId: session.user.id,
+              metadata: {
+                name: firstName,
+                dev_experience: experience,
+                onboarding_completed: true,
+              },
+            }),
+          });
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            console.error('Server-side update error:', data);
+            throw new Error(data.message || 'Failed to update user metadata');
+          }
+          
+          console.log('User data updated successfully via API:', data);
+          
+          // Check if we have configuration issues
+          if (data.debug) {
+            console.log('Server configuration status:', data.debug);
+            if (!data.debug.supabaseUrl || !data.debug.serviceKey) {
+              throw new Error('Supabase configuration is incomplete. Please check your environment variables.');
+            }
+          }
+          
+          updateSuccess = true;
+        } catch (serverError: any) {
+          console.error('Server API error:', serverError);
+          updateError = serverError;
         }
-        
-        const data = await response.json();
-        console.log('User data updated successfully via API:', data);
-        updateSuccess = true;
       }
       
       if (!updateSuccess) {
-        throw new Error('Failed to update user metadata through all available methods');
+        throw new Error(updateError?.message || 'Failed to update user metadata through all available methods');
       }
       
       // Show success message
@@ -260,18 +245,19 @@ export default function Onboarding() {
                 <p>Session Available: {!!session}</p>
                 <p>User ID: {session?.user?.id || 'Not available'}</p>
                 <p>Supabase Token: {!!session?.supabaseAccessToken ? 'Available' : 'Not available'}</p>
-                {session?.user?.id === 'test-user-id' && (
-                  <>
-                    <p className="font-semibold mt-4">Test User Data:</p>
-                    <pre className="bg-white p-2 rounded">
-                      {JSON.stringify(JSON.parse(sessionStorage.getItem('test_user_metadata') || '{}'), null, 2)}
-                    </pre>
-                  </>
-                )}
                 <details className="mt-4">
                   <summary>Session Data</summary>
                   <pre className="bg-white p-2 rounded mt-2">
                     {JSON.stringify(session, null, 2)}
+                  </pre>
+                </details>
+                <details className="mt-4">
+                  <summary>Environment</summary>
+                  <pre className="bg-white p-2 rounded mt-2">
+                    {JSON.stringify({
+                      NODE_ENV: process.env.NODE_ENV,
+                      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'configured' : 'missing',
+                    }, null, 2)}
                   </pre>
                 </details>
               </div>

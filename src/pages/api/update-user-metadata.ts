@@ -10,9 +10,6 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 // Initialize Supabase admin client with service role key
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-// Test user ID for development
-const TEST_USER_ID = 'test-user-id';
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -41,22 +38,7 @@ export default async function handler(
     console.log('Server: Updating metadata for user:', userId);
     console.log('Server: Metadata to update:', metadata);
 
-    // Special handling for test user in development
-    if (userId === TEST_USER_ID || process.env.NODE_ENV === 'development') {
-      console.log('Server: Using test user mode for development');
-      // For test user, we'll just return success without actually updating Supabase
-      return res.status(200).json({ 
-        success: true, 
-        user: {
-          id: userId,
-          email: session.user.email,
-          user_metadata: metadata
-        },
-        note: 'Test user metadata updated in memory only'
-      });
-    }
-
-    // For real users, update user metadata using admin client
+    // Update user metadata using admin client
     const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
       userId,
       { user_metadata: metadata }
@@ -67,10 +49,29 @@ export default async function handler(
       return res.status(500).json({ message: error.message });
     }
 
+    // Log success for debugging
     console.log('Server: User metadata updated successfully:', data);
-    return res.status(200).json({ success: true, user: data.user });
+    
+    // Return the updated user data
+    return res.status(200).json({ 
+      success: true, 
+      user: data.user,
+      debug: {
+        environment: process.env.NODE_ENV,
+        supabaseUrl: supabaseUrl ? 'configured' : 'missing',
+        serviceKey: supabaseServiceKey ? 'configured' : 'missing'
+      }
+    });
+    
   } catch (error: any) {
     console.error('Server: Unexpected error:', error);
-    return res.status(500).json({ message: error.message || 'An unexpected error occurred' });
+    return res.status(500).json({ 
+      message: error.message || 'An unexpected error occurred',
+      debug: {
+        environment: process.env.NODE_ENV,
+        supabaseUrl: supabaseUrl ? 'configured' : 'missing',
+        serviceKey: supabaseServiceKey ? 'configured' : 'missing'
+      }
+    });
   }
 } 
