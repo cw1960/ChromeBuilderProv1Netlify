@@ -1,4 +1,5 @@
-import { searchBrave } from '@smithery/client';
+// Removing the dependency on @smithery/client
+// import { searchBrave } from '@smithery/client';
 
 // Interface for search results
 export interface SearchResult {
@@ -37,33 +38,45 @@ export interface SearchOptions {
  */
 export async function webSearch(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
   try {
-    const results = await searchBrave({
-      q: query,
-      count: options.count || 10,
-      offset: options.offset || 0,
-      country: options.country,
-      language: options.language,
-      safeSearch: options.safeSearch,
-      spellcheck: options.spellcheck,
-      freshness: options.freshness,
-      textDecorations: options.textDecorations,
-      textFormat: options.textFormat,
-    });
-
-    // Transform the Brave Search results to our common format
-    return results.web.results.map(result => ({
-      title: result.title,
-      url: result.url,
-      description: result.description,
-      isNavigational: Boolean(result.isNavigational),
-      deepLinks: result.deepLinks?.map(link => ({
-        title: link.title,
-        url: link.url,
-        description: link.description,
-      })),
-      imageUrl: result.image?.url,
-      source: 'brave',
-    }));
+    // Mock implementation for development
+    console.log('Mock web search for:', query, options);
+    
+    // Return mock search results
+    return [
+      {
+        title: 'Chrome Extension Development - Chrome Developers',
+        url: 'https://developer.chrome.com/docs/extensions/',
+        description: 'Learn how to develop extensions for Chrome browser. This documentation provides guides, API references, and examples.',
+        isNavigational: true,
+        deepLinks: [
+          {
+            title: 'Getting Started',
+            url: 'https://developer.chrome.com/docs/extensions/mv3/getstarted/',
+            description: 'A step-by-step guide to creating your first Chrome extension.'
+          },
+          {
+            title: 'API Reference',
+            url: 'https://developer.chrome.com/docs/extensions/reference/',
+            description: 'Complete reference for Chrome extension APIs.'
+          }
+        ],
+        source: 'mock'
+      },
+      {
+        title: 'Manifest V3 Overview - Chrome Developers',
+        url: 'https://developer.chrome.com/docs/extensions/mv3/intro/',
+        description: 'An overview of Manifest V3 for Chrome Extensions, including key concepts and migration guide.',
+        isNavigational: false,
+        source: 'mock'
+      },
+      {
+        title: 'Chrome Extension Examples - GitHub',
+        url: 'https://github.com/GoogleChrome/chrome-extensions-samples',
+        description: 'A collection of sample Chrome extensions demonstrating various features and APIs.',
+        isNavigational: false,
+        source: 'mock'
+      }
+    ];
   } catch (error) {
     console.error('Error performing web search:', error);
     throw new Error('Failed to search the web: ' + (error instanceof Error ? error.message : String(error)));

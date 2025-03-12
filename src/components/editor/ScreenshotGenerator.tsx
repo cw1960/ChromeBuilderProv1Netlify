@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@radix-ui/react-card';
-import { Camera, Download, Image, Upload, Plus, Trash2, PaintBucket, Type, WindowIcon } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Camera, Download, Image, Upload, Plus, Trash2, PaintBucket, Type, AppWindow } from 'lucide-react';
 
 type ScreenshotGeneratorProps = {
   projectData?: any;
@@ -22,6 +22,7 @@ const ScreenshotGenerator: React.FC<ScreenshotGeneratorProps> = ({
   const [overlayPosition, setOverlayPosition] = useState<string>('bottom'); // top, center, bottom
   const [overlayColor, setOverlayColor] = useState<string>('#000000');
   const [overlayBgColor, setOverlayBgColor] = useState<string>('#ffffff80');
+  const [uploadedImageSrc, setUploadedImageSrc] = useState<string>('');
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -102,7 +103,7 @@ const ScreenshotGenerator: React.FC<ScreenshotGeneratorProps> = ({
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        setScreenshots([...screenshots, result]);
+        setUploadedImageSrc(result);
       };
       reader.readAsDataURL(file);
     }
@@ -199,10 +200,10 @@ const ScreenshotGenerator: React.FC<ScreenshotGeneratorProps> = ({
                     </div>
                   )}
                   
-                  {activeTab === 'upload' && imageRef.current && (
+                  {activeTab === 'upload' && (
                     <img 
                       ref={imageRef}
-                      src={imageRef.current.src}
+                      src={uploadedImageSrc}
                       alt="Uploaded content"
                       className="w-full h-full object-contain"
                     />
@@ -311,7 +312,7 @@ const ScreenshotGenerator: React.FC<ScreenshotGeneratorProps> = ({
                       value="browser" 
                       className={`flex-1 px-4 py-2 text-center ${activeTab === 'browser' ? 'border-b-2 border-blue-500' : ''}`}
                     >
-                      <WindowIcon className="w-4 h-4 mx-auto mb-1" />
+                      <AppWindow className="w-4 h-4 mx-auto mb-1" />
                       Browser
                     </TabsTrigger>
                     <TabsTrigger 
@@ -403,14 +404,8 @@ const ScreenshotGenerator: React.FC<ScreenshotGeneratorProps> = ({
                             if (file) {
                               const reader = new FileReader();
                               reader.onloadend = () => {
-                                if (imageRef.current) {
-                                  imageRef.current.src = reader.result as string;
-                                } else {
-                                  // Create a new image element if it doesn't exist
-                                  const img = new Image();
-                                  img.src = reader.result as string;
-                                  imageRef.current = img;
-                                }
+                                const result = reader.result as string;
+                                setUploadedImageSrc(result);
                               };
                               reader.readAsDataURL(file);
                             }

@@ -3,10 +3,10 @@ import { ExtensionTemplate, TemplateCategory, TemplateDifficulty, getAllTemplate
 import { Filter, Search, Code, Zap, BarChart2, Coffee, BookOpen, CheckCircle } from 'lucide-react';
 
 interface TemplateSelectorProps {
-  onSelectTemplate: (templateId: string) => void;
+  onSelect: (templateId: string) => void;
 }
 
-export default function TemplateSelector({ onSelectTemplate }: TemplateSelectorProps) {
+export default function TemplateSelector({ onSelect }: TemplateSelectorProps) {
   const [templates, setTemplates] = useState<ExtensionTemplate[]>([]);
   const [filteredTemplates, setFilteredTemplates] = useState<ExtensionTemplate[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
@@ -48,7 +48,7 @@ export default function TemplateSelector({ onSelectTemplate }: TemplateSelectorP
   // Handle template selection
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
-    onSelectTemplate(templateId);
+    onSelect(templateId);
   };
 
   // Get difficulty icon

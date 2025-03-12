@@ -1,10 +1,23 @@
 import { useSession, signIn, signOut } from 'next-auth/react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 export default function Home() {
   const { data: session, status } = useSession();
-  const loading = status === 'loading';
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  const loading = status === 'loading' || !mounted;
+
+  // Handle mounting to prevent hydration issues
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleSignIn = () => {
+    router.push('/auth/signin');
+  };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center py-2">
@@ -26,21 +39,19 @@ export default function Home() {
         </p>
 
         <div className="mt-8 flex justify-center">
-          {loading && <div>Loading...</div>}
-          
-          {!loading && !session && (
+          {loading ? (
+            <div className="animate-pulse rounded-md bg-gray-300 h-10 w-40"></div>
+          ) : !session ? (
             <button
-              onClick={() => signIn()}
+              onClick={handleSignIn}
               className="rounded-md bg-primary px-4 py-2 text-primary-foreground shadow-sm hover:bg-primary/90"
             >
               Sign in to get started
             </button>
-          )}
-          
-          {session && (
+          ) : (
             <div className="flex flex-col items-center space-y-4">
               <p>
-                Signed in as {session.user?.name} ({session.user?.email})
+                Signed in as {session.user?.name || session.user?.email}
               </p>
               
               <div className="flex space-x-4">

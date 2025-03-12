@@ -6,7 +6,7 @@ import { Resizable } from 'react-resizable-panels';
 export type SupportedLanguage = 'javascript' | 'typescript' | 'json' | 'html' | 'css';
 
 interface CodeEditorProps {
-  code: string;
+  value: string;
   language: SupportedLanguage;
   onChange?: (value: string) => void;
   readOnly?: boolean;
@@ -17,7 +17,7 @@ interface CodeEditorProps {
 }
 
 export default function CodeEditor({
-  code,
+  value,
   language,
   onChange,
   readOnly = false,
@@ -100,7 +100,7 @@ export default function CodeEditor({
       <Editor
         height={height}
         language={language}
-        value={code}
+        value={value}
         beforeMount={beforeMount}
         onMount={onMount}
         onChange={(value) => onChange && onChange(value || '')}

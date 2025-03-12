@@ -1,4 +1,5 @@
-import { magic } from '@smithery/client';
+// Removing the dependency on @smithery/client
+// import { magic } from '@smithery/client';
 import { createId } from '@paralleldrive/cuid2';
 
 // Magic AI prompt types
@@ -46,6 +47,174 @@ export interface GeneratedManifest {
 // Function to create a conversation ID for tracking
 export function createConversationId(): string {
   return createId();
+}
+
+// Mock implementation of the magic function
+async function mockMagic({ messages }: { messages: Array<{ role: string; content: string }> }): Promise<{ content: string }> {
+  console.log('Mock AI request:', messages[messages.length - 1].content);
+  
+  // Return mock responses based on the last message content
+  const lastMessage = messages[messages.length - 1].content.toLowerCase();
+  
+  if (lastMessage.includes('manifest.json')) {
+    return {
+      content: `Here's a basic manifest.json file for your Chrome extension:
+
+\`\`\`json
+{
+  "manifest_version": 3,
+  "name": "Sample Extension",
+  "version": "1.0.0",
+  "description": "A sample Chrome extension",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
+\`\`\`
+
+This manifest sets up a basic extension with a popup, icons, and storage permission. The background service worker will handle any background tasks.`
+    };
+  }
+  
+  if (lastMessage.includes('popup ui') || lastMessage.includes('options page')) {
+    return {
+      content: `Here's a simple UI for your Chrome extension:
+
+\`\`\`html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sample Extension</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      font-size: 18px;
+      color: #4285f4;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sample Extension</h1>
+  <p>This is a sample Chrome extension.</p>
+  <button id="actionButton">Click Me</button>
+  <script src="popup.js"></script>
+</body>
+</html>
+\`\`\`
+
+This UI includes a simple header, description, and button. The styling is clean and follows Material Design principles.`
+    };
+  }
+  
+  if (lastMessage.includes('background') || lastMessage.includes('service worker')) {
+    return {
+      content: `Here's a background service worker for your Chrome extension:
+
+\`\`\`javascript
+// Background service worker for Chrome extension
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Extension installed');
+  
+  // Initialize storage with default values
+  chrome.storage.local.set({ enabled: true, count: 0 }, () => {
+    console.log('Default settings initialized');
+  });
+});
+
+// Listen for messages from popup or content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'getData') {
+    chrome.storage.local.get(['enabled', 'count'], (result) => {
+      sendResponse(result);
+    });
+    return true; // Required for async response
+  }
+});
+\`\`\`
+
+This background script sets up initial storage values when the extension is installed and handles messages from other parts of the extension.`
+    };
+  }
+  
+  if (lastMessage.includes('content script')) {
+    return {
+      content: `Here's a content script for your Chrome extension:
+
+\`\`\`javascript
+// Content script for Chrome extension
+console.log('Content script loaded');
+
+// Function to modify the page
+function modifyPage() {
+  const headings = document.querySelectorAll('h1, h2');
+  headings.forEach(heading => {
+    heading.style.color = '#4285f4';
+  });
+  
+  // Add a floating button
+  const button = document.createElement('button');
+  button.textContent = 'Extension Action';
+  button.style.position = 'fixed';
+  button.style.bottom = '20px';
+  button.style.right = '20px';
+  button.style.zIndex = '9999';
+  button.style.padding = '10px';
+  button.style.backgroundColor = '#4285f4';
+  button.style.color = 'white';
+  button.style.border = 'none';
+  button.style.borderRadius = '4px';
+  
+  button.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'buttonClicked' });
+  });
+  
+  document.body.appendChild(button);
+}
+
+// Run the modification function
+modifyPage();
+\`\`\`
+
+This content script modifies the page by changing heading colors and adding a floating button that communicates with the background script.`
+    };
+  }
+  
+  // Default response for other types of requests
+  return {
+    content: `Here's a sample response for your request. In a real implementation, this would be generated by an AI model based on your specific prompt.
+
+For Chrome extension development, remember to:
+1. Follow Manifest V3 best practices
+2. Use the principle of least privilege for permissions
+3. Implement proper error handling
+4. Test thoroughly across different scenarios
+5. Consider both user experience and performance
+
+Let me know if you need more specific guidance!`
+  };
 }
 
 // System prompts for different tasks
@@ -128,7 +297,7 @@ Please provide:
 
 Please use modern JavaScript and follow Chrome Extension best practices.`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -159,7 +328,7 @@ The manifest should:
 
 Please provide the complete manifest.json file and a brief explanation of important configuration choices.`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -199,7 +368,7 @@ Please provide:
 
 The code should be well-structured and commented.`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -247,7 +416,7 @@ Please provide:
 4. Proper error handling
 5. Efficient event listeners`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -275,7 +444,7 @@ Please provide:
 export async function generateContentScript(description: string, manifest: string): Promise<GeneratedCode> {
   const template = getPromptTemplate(PromptType.WRITE_CONTENT_SCRIPT);
   
-  template.user = `Please create the content script for a Chrome Extension with the following description:
+  template.user = `Please create a content script for a Chrome Extension with the following description:
   
 ${description}
 
@@ -286,12 +455,12 @@ ${manifest}
 
 Please provide:
 1. A well-structured content script following Chrome Extension best practices
-2. Code that safely interacts with web pages
+2. Code that interacts with web pages safely and efficiently
 3. Clear comments explaining the code
 4. Proper error handling
-5. Consideration for performance and page load impact`;
+5. Consideration for performance and security`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -315,33 +484,33 @@ Please provide:
   };
 }
 
-// Debug extension code
+// Debug code and provide fixes
 export async function debugCode(code: string, errors: string): Promise<GeneratedCode> {
   const template = getPromptTemplate(PromptType.DEBUG_CODE);
   
-  template.user = `Please help me debug the following Chrome Extension code:
+  template.user = `Please help debug the following Chrome Extension code:
   
 \`\`\`
 ${code}
 \`\`\`
 
-I'm encountering the following errors or issues:
+The errors/issues I'm experiencing are:
 ${errors}
 
 Please:
-1. Identify the problems in the code
+1. Identify the issues in the code
 2. Provide a fixed version of the code
 3. Explain what was causing each issue and how your changes fix it
-4. Include any relevant Chrome Extension best practices that would help prevent similar issues`;
+4. Suggest any best practices or improvements`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
     ]
   });
 
-  // Extract the fixed code and explanation from the response
+  // Extract the code and explanation from the response
   const content = response.content;
   
   // Find the code block with the fixed code
@@ -352,15 +521,11 @@ Please:
   let explanation = content.replace(/```(?:\w+)?\s*[\s\S]*?\s*```/, '').trim();
   
   // Determine the language based on the original code
-  const languageMatch = code.match(/^\/\/ ==UserScript==|^<!-- HTML|^<!DOCTYPE html|^<html|^{[\s\n]*"manifest_version"/);
-  let language = 'javascript'; // Default
-  
-  if (languageMatch) {
-    if (languageMatch[0].startsWith('<')) {
-      language = 'html';
-    } else if (languageMatch[0].startsWith('{')) {
-      language = 'json';
-    }
+  let language = 'javascript';
+  if (code.includes('<!DOCTYPE html') || code.includes('<html')) {
+    language = 'html';
+  } else if (code.includes('manifest_version')) {
+    language = 'json';
   }
   
   return {
@@ -370,7 +535,7 @@ Please:
   };
 }
 
-// Explain extension code
+// Explain code
 export async function explainCode(code: string): Promise<string> {
   const template = getPromptTemplate(PromptType.EXPLAIN_CODE);
   
@@ -382,12 +547,11 @@ ${code}
 
 Please provide:
 1. A high-level overview of what this code does
-2. An explanation of the key components and how they work together
-3. Details on any Chrome Extension specific APIs being used
-4. Information on the browser features or permissions being utilized
-5. Any important security or performance considerations`;
+2. An explanation of key functions and their purpose
+3. How this code interacts with Chrome Extension APIs
+4. Any potential issues or areas for improvement`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -397,7 +561,7 @@ Please provide:
   return response.content;
 }
 
-// Optimize extension code
+// Optimize code
 export async function optimizeCode(code: string, concerns?: string): Promise<GeneratedCode> {
   const template = getPromptTemplate(PromptType.OPTIMIZE_CODE);
   
@@ -407,22 +571,22 @@ export async function optimizeCode(code: string, concerns?: string): Promise<Gen
 ${code}
 \`\`\`
 
-${concerns ? `I have the following specific concerns or requirements:\n${concerns}` : ''}
+${concerns ? `Specific concerns: ${concerns}` : ''}
 
 Please provide:
 1. An optimized version of the code
 2. An explanation of the optimizations made
-3. The performance or resource usage benefits of each change
-4. Any trade-offs or considerations in your optimization approach`;
+3. How these changes improve performance or resource usage
+4. Any trade-offs involved in the optimizations`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
     ]
   });
 
-  // Extract the optimized code and explanation from the response
+  // Extract the code and explanation from the response
   const content = response.content;
   
   // Find the code block with the optimized code
@@ -433,15 +597,11 @@ Please provide:
   let explanation = content.replace(/```(?:\w+)?\s*[\s\S]*?\s*```/, '').trim();
   
   // Determine the language based on the original code
-  const languageMatch = code.match(/^\/\/ ==UserScript==|^<!-- HTML|^<!DOCTYPE html|^<html|^{[\s\n]*"manifest_version"/);
-  let language = 'javascript'; // Default
-  
-  if (languageMatch) {
-    if (languageMatch[0].startsWith('<')) {
-      language = 'html';
-    } else if (languageMatch[0].startsWith('{')) {
-      language = 'json';
-    }
+  let language = 'javascript';
+  if (code.includes('<!DOCTYPE html') || code.includes('<html')) {
+    language = 'html';
+  } else if (code.includes('manifest_version')) {
+    language = 'json';
   }
   
   return {
@@ -451,23 +611,22 @@ Please provide:
   };
 }
 
-// Generate guidance for extension icons
+// Generate icon guidance
 export async function generateIconGuidance(extensionName: string, description: string): Promise<string> {
   const template = getPromptTemplate(PromptType.GENERATE_ICONS);
   
-  template.user = `Please provide guidance on creating icons for a Chrome Extension with the following details:
+  template.user = `Please provide guidance for creating icons for a Chrome Extension with the following details:
   
 Name: ${extensionName}
 Description: ${description}
 
-Please include:
-1. Design suggestions that reflect the extension's purpose and target audience
-2. Color scheme recommendations
-3. Style and visual elements to consider
-4. All required icon sizes for Chrome Extensions
-5. Best practices for icon design in browser extensions`;
+Please provide:
+1. Design recommendations (colors, style, imagery)
+2. Sizes needed for Chrome Extension icons
+3. Best practices for icon design
+4. How the icon should represent the extension's purpose`;
 
-  const response = await magic({
+  const response = await mockMagic({
     messages: [
       { role: 'system', content: template.system },
       { role: 'user', content: template.user }
@@ -477,7 +636,7 @@ Please include:
   return response.content;
 }
 
-// Function to continue a conversation with Magic AI
+// Continue a conversation with the AI
 export async function continueConversation(
   conversationId: string,
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
@@ -489,10 +648,9 @@ export async function continueConversation(
     { role: 'user', content: newUserMessage }
   ];
   
-  // Get a response from Magic AI
-  const response = await magic({
-    messages: updatedMessages,
-    conversation_id: conversationId
+  // Call the AI with the updated conversation
+  const response = await mockMagic({
+    messages: updatedMessages
   });
   
   return response.content;

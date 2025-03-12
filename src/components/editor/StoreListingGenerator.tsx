@@ -4,7 +4,7 @@ import {
   TabsContent, 
   TabsList, 
   TabsTrigger 
-} from '@radix-ui/react-tabs';
+} from '@/components/ui';
 import { 
   Card, 
   CardContent, 
@@ -12,20 +12,20 @@ import {
   CardFooter, 
   CardHeader, 
   CardTitle 
-} from '@radix-ui/react-card';
+} from '@/components/ui/Card';
 import { 
-  Input, 
-  Button, 
-  Label, 
-  Textarea, 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@radix-ui/react-select';
-import { Slider } from '@radix-ui/react-slider';
-import { Switch } from '@radix-ui/react-switch';
+  Input,
+  Label,
+  Textarea,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Slider,
+  Switch,
+  Button
+} from '@/components/ui';
 import { AlertCircle, Download, CheckCircle2, Upload } from 'lucide-react';
 
 type StoreListingData = {

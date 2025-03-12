@@ -104,96 +104,264 @@ export default function ManifestEditorPage() {
   
   if (error && !project) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 p-4 rounded-md max-w-md flex items-start">
-          <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Error</h2>
-            <p>{error}</p>
-            <button 
-              onClick={() => router.push('/dashboard')}
-              className="mt-4 px-4 py-2 bg-primary text-white rounded-md"
-            >
-              Return to Dashboard
-            </button>
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="flex items-center mb-4 text-destructive">
+          <AlertTriangle className="h-6 w-6 mr-2" />
+          <h2 className="text-xl font-semibold">Error</h2>
         </div>
+        <p className="mb-6 text-center">{error}</p>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Dashboard
+        </button>
       </div>
     );
   }
   
   return (
-    <div className="container mx-auto py-6 px-4 max-w-5xl">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <button
-            onClick={handleBack}
-            className="flex items-center text-sm text-muted-foreground hover:text-foreground mb-2"
-          >
-            <ArrowLeft size={16} className="mr-1" /> Back to Project
-          </button>
-          <h1 className="text-2xl font-bold">{project?.name} - Manifest Editor</h1>
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold">Manifest Editor</h1>
+            <span className="ml-4 text-sm text-muted-foreground">
+              {project?.name}
+            </span>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={handleBack}
+              className="flex items-center rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </button>
+            
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </header>
+      
+      <main className="container mx-auto p-4">
+        {error && (
+          <div className="mb-4 rounded-md bg-destructive/15 p-4 text-destructive">
+            {error}
+          </div>
+        )}
+        
+        {success && (
+          <div className="mb-4 rounded-md bg-green-500/15 p-4 text-green-600">
+            {success}
+          </div>
+        )}
+        
+        <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="rounded-lg border border-border p-4">
+            <h2 className="mb-2 text-lg font-semibold">Basic Information</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={project?.manifest.name || ''}
+                  onChange={(e) => {
+                    if (!project) return;
+                    handleManifestChange({
+                      ...project.manifest,
+                      name: e.target.value
+                    });
+                  }}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </div>
+              
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Version
+                </label>
+                <input
+                  type="text"
+                  value={project?.manifest.version || ''}
+                  onChange={(e) => {
+                    if (!project) return;
+                    handleManifestChange({
+                      ...project.manifest,
+                      version: e.target.value
+                    });
+                  }}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </div>
+              
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  Description
+                </label>
+                <textarea
+                  value={project?.manifest.description || ''}
+                  onChange={(e) => {
+                    if (!project) return;
+                    handleManifestChange({
+                      ...project.manifest,
+                      description: e.target.value
+                    });
+                  }}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={3}
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="rounded-lg border border-border p-4">
+            <h2 className="mb-2 text-lg font-semibold">Icons</h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Default Icons</span>
+                <Link
+                  href={`/dashboard/icon-generator?projectId=${projectId}`}
+                  className="flex items-center text-xs text-primary hover:underline"
+                >
+                  <Image className="mr-1 h-3 w-3" />
+                  Generate Icons
+                </Link>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2">
+                {project?.manifest.icons && Object.entries(project.manifest.icons).map(([size, path]) => (
+                  <div key={size} className="flex flex-col items-center">
+                    <div className="mb-1 h-12 w-12 rounded-md border border-border flex items-center justify-center">
+                      {path ? (
+                        <img
+                          src={`data:image/png;base64,${path}`}
+                          alt={`Icon ${size}px`}
+                          className="max-h-10 max-w-10"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No Icon</span>
+                      )}
+                    </div>
+                    <span className="text-xs">{size}px</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="rounded-lg border border-border p-4">
+            <h2 className="mb-2 text-lg font-semibold">Permissions</h2>
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {project?.manifest.permissions?.map((permission, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs"
+                  >
+                    <span>{permission}</span>
+                    <button
+                      onClick={() => {
+                        if (!project) return;
+                        const newPermissions = [...project.manifest.permissions!];
+                        newPermissions.splice(index, 1);
+                        handleManifestChange({
+                          ...project.manifest,
+                          permissions: newPermissions
+                        });
+                      }}
+                      className="ml-2 text-destructive hover:text-destructive/80"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+                
+                {(!project?.manifest.permissions || project.manifest.permissions.length === 0) && (
+                  <span className="text-xs text-muted-foreground">No permissions added</span>
+                )}
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  id="new-permission"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="Add permission..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const input = e.currentTarget;
+                      const value = input.value.trim();
+                      
+                      if (value && project) {
+                        const permissions = project.manifest.permissions || [];
+                        
+                        if (!permissions.includes(value)) {
+                          handleManifestChange({
+                            ...project.manifest,
+                            permissions: [...permissions, value]
+                          });
+                        }
+                        
+                        input.value = '';
+                      }
+                    }
+                  }}
+                />
+                
+                <button
+                  onClick={() => {
+                    const input = document.getElementById('new-permission') as HTMLInputElement;
+                    const value = input.value.trim();
+                    
+                    if (value && project) {
+                      const permissions = project.manifest.permissions || [];
+                      
+                      if (!permissions.includes(value)) {
+                        handleManifestChange({
+                          ...project.manifest,
+                          permissions: [...permissions, value]
+                        });
+                      }
+                      
+                      input.value = '';
+                    }
+                  }}
+                  className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/dashboard/icon-generator?projectId=${projectId}`}
-            className="flex items-center px-4 py-2 border border-input bg-background rounded-md hover:bg-muted/50 text-sm"
-          >
-            <Image size={16} className="mr-2" /> Generate Icons
-          </Link>
-          
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full"></div>
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save size={16} className="mr-2" /> Save Manifest
-              </>
-            )}
-          </button>
+        <div className="rounded-lg border border-border p-4">
+          <h2 className="mb-4 text-lg font-semibold">Raw Manifest JSON</h2>
+          <ManifestEditor
+            value={JSON.stringify(project?.manifest || {}, null, 2)}
+            onChange={(value) => {
+              try {
+                const parsed = JSON.parse(value);
+                handleManifestChange(parsed);
+              } catch (err) {
+                // Ignore JSON parse errors while typing
+              }
+            }}
+          />
         </div>
-      </div>
-      
-      {/* Status messages */}
-      {error && (
-        <div className="mb-6 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex items-center">
-          <AlertTriangle size={16} className="mr-2 text-red-600 dark:text-red-400" />
-          <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
-        </div>
-      )}
-      
-      {success && (
-        <div className="mb-6 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-          <p className="text-sm text-green-800 dark:text-green-300">{success}</p>
-        </div>
-      )}
-      
-      {/* Description */}
-      <div className="mb-6 p-4 bg-muted/50 rounded-md">
-        <h2 className="text-lg font-semibold mb-2">About the Manifest</h2>
-        <p className="text-muted-foreground">
-          The manifest.json file is the configuration file for your Chrome extension. It tells Chrome 
-          what permissions your extension needs, what resources it can access, and how it integrates 
-          with the browser. Use this editor to configure all aspects of your extension.
-        </p>
-      </div>
-      
-      {/* Manifest Editor Component */}
-      {project && (
-        <ManifestEditor 
-          manifest={project.manifest} 
-          onChange={handleManifestChange}
-          onSave={handleSave}
-        />
-      )}
+      </main>
     </div>
   );
 }
