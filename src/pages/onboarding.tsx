@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSession, getSession } from 'next-auth/react';
+import { useSession, getSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { supabase, createSupabaseClient } from '@/lib/supabase';
@@ -15,7 +15,7 @@ const EXPERIENCE_LEVELS = [
 ];
 
 export default function Onboarding() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const router = useRouter();
   const [firstName, setFirstName] = useState('');
   const [experience, setExperience] = useState('');
@@ -24,6 +24,7 @@ export default function Onboarding() {
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { callbackUrl } = router.query;
 
   // Handle mounting to prevent hydration issues
   useEffect(() => {
@@ -99,7 +100,7 @@ export default function Onboarding() {
         }
         
         // Update user metadata in Supabase
-        const { data: userData, error: clientError } = await client.auth.updateUser({
+        const { error: metadataError } = await client.auth.updateUser({
           data: {
             name: firstName,
             dev_experience: experience,
@@ -107,12 +108,27 @@ export default function Onboarding() {
           }
         });
         
-        if (clientError) {
-          console.error('Supabase client update error:', clientError);
-          updateError = clientError;
+        if (metadataError) {
+          console.error('Supabase metadata update error:', metadataError);
+          updateError = metadataError;
         } else {
-          console.log('User data updated successfully via client:', userData);
-          updateSuccess = true;
+          // Insert data into user_profiles table
+          const { error: profileError } = await client
+            .from('user_profiles')
+            .upsert({
+              id: session.user.id,
+              first_name: firstName,
+              dev_experience: experience,
+              onboarding_completed: true,
+            });
+
+          if (profileError) {
+            console.error('Supabase profile data error:', profileError);
+            updateError = profileError;
+          } else {
+            console.log('User data updated successfully');
+            updateSuccess = true;
+          }
         }
       } catch (clientError) {
         console.error('Error using Supabase client:', clientError);
@@ -136,6 +152,12 @@ export default function Onboarding() {
                 dev_experience: experience,
                 onboarding_completed: true,
               },
+              onboardingData: {
+                id: session.user.id,
+                first_name: firstName,
+                dev_experience: experience,
+                onboarding_completed: true,
+              },
             }),
           });
           
@@ -143,19 +165,10 @@ export default function Onboarding() {
           
           if (!response.ok) {
             console.error('Server-side update error:', data);
-            throw new Error(data.message || 'Failed to update user metadata');
+            throw new Error(data.message || 'Failed to update user data');
           }
           
           console.log('User data updated successfully via API:', data);
-          
-          // Check if we have configuration issues
-          if (data.debug) {
-            console.log('Server configuration status:', data.debug);
-            if (!data.debug.supabaseUrl || !data.debug.serviceKey) {
-              throw new Error('Supabase configuration is incomplete. Please check your environment variables.');
-            }
-          }
-          
           updateSuccess = true;
         } catch (serverError: any) {
           console.error('Server API error:', serverError);
@@ -164,21 +177,49 @@ export default function Onboarding() {
       }
       
       if (!updateSuccess) {
-        throw new Error(updateError?.message || 'Failed to update user metadata through all available methods');
+        throw new Error(updateError?.message || 'Failed to update user data through all available methods');
       }
       
       // Show success message
       setShowSuccess(true);
       
-      // Redirect to dashboard after 1.5 seconds
+      // Reset submission state
+      setIsSubmitting(false);
+      
+      // Update the session to reflect the new metadata
+      await updateSession({
+        ...session,
+        user: {
+          ...session.user,
+          metadata: {
+            ...session.user.metadata,
+            name: firstName,
+            dev_experience: experience,
+            onboarding_completed: true,
+          }
+        }
+      });
+      
+      // Force a session refresh to ensure middleware gets updated data
+      await getSession();
+      
+      // Force a hard redirect to dashboard after a brief delay
+      // Use a more direct approach to bypass middleware for this navigation
       setTimeout(() => {
-        router.push('/dashboard');
+        // Check if there's a callback URL to redirect back to
+        if (callbackUrl && typeof callbackUrl === 'string') {
+          console.log('Redirecting to callback URL:', callbackUrl);
+          // Use our special force-dashboard route that bypasses middleware
+          window.location.href = `/api/auth/force-dashboard?userId=${session.user.id}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
+        } else {
+          // Use our special force-dashboard route that bypasses middleware
+          window.location.href = `/api/auth/force-dashboard?userId=${session.user.id}`;
+        }
       }, 1500);
       
     } catch (err: any) {
       console.error('Onboarding error:', err);
       setError(err.message || 'An error occurred during onboarding');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -236,39 +277,11 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Debug info - only shown in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-              <h3 className="text-lg font-semibold mb-2">Debug Information</h3>
-              <div className="space-y-2 text-sm">
-                <p>Auth Status: {status}</p>
-                <p>Session Available: {!!session}</p>
-                <p>User ID: {session?.user?.id || 'Not available'}</p>
-                <p>Supabase Token: {!!session?.supabaseAccessToken ? 'Available' : 'Not available'}</p>
-                <details className="mt-4">
-                  <summary>Session Data</summary>
-                  <pre className="bg-white p-2 rounded mt-2">
-                    {JSON.stringify(session, null, 2)}
-                  </pre>
-                </details>
-                <details className="mt-4">
-                  <summary>Environment</summary>
-                  <pre className="bg-white p-2 rounded mt-2">
-                    {JSON.stringify({
-                      NODE_ENV: process.env.NODE_ENV,
-                      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'configured' : 'missing',
-                    }, null, 2)}
-                  </pre>
-                </details>
-              </div>
-            </div>
-          )}
-
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-4 rounded-md shadow-sm">
+            <div className="space-y-4">
               {/* First Name */}
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium">
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-200">
                   First Name
                 </label>
                 <input
@@ -278,14 +291,14 @@ export default function Onboarding() {
                   required
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
+                  className="mt-1 block w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-2 text-gray-200 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
                   placeholder="John"
                 />
               </div>
               
               {/* Development Experience */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-medium mb-2 text-gray-200">
                   Development Experience
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -296,8 +309,8 @@ export default function Onboarding() {
                       onClick={() => setExperience(level.id)}
                       className={`px-4 py-2 rounded-md border ${
                         experience === level.id
-                          ? 'bg-blue-100 border-blue-500 text-blue-700 dark:bg-blue-900/50 dark:border-blue-400 dark:text-blue-300'
-                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                          ? 'bg-green-900/50 border-green-500 text-green-300'
+                          : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
                       }`}
                     >
                       {level.label}
@@ -308,7 +321,7 @@ export default function Onboarding() {
               
               {/* Claude API Key */}
               <div>
-                <label htmlFor="apiKey" className="block text-sm font-medium">
+                <label htmlFor="apiKey" className="block text-sm font-medium text-gray-200">
                   Claude API Key
                 </label>
                 <input
@@ -318,10 +331,10 @@ export default function Onboarding() {
                   required
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
+                  className="mt-1 block w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-2 text-gray-200 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
                   placeholder="sk-ant-api03-..."
                 />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-gray-400">
                   Your API key is stored locally and never sent to our servers.
                 </p>
               </div>
@@ -330,7 +343,7 @@ export default function Onboarding() {
             <div>
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full bg-green-500 hover:bg-green-600 text-black font-medium"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? 'Setting up...' : 'Complete Setup'}

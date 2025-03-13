@@ -3,7 +3,7 @@ import { Send, Paperclip, Bot, User, Download, Save, Copy, Code as CodeIcon, Pla
 import { Button } from '@/components/ui';
 import { useSession } from 'next-auth/react';
 import { createId } from '@paralleldrive/cuid2';
-import { ProjectFileType } from '@/lib/supabase-mcp';
+import { ProjectFileType, getProject } from '@/lib/supabase-mcp';
 
 type Message = {
   id: string;
@@ -50,6 +50,60 @@ const ConversationInterface: React.FC<ConversationInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
   
+  // Load project data when projectId changes
+  useEffect(() => {
+    const loadProjectData = async () => {
+      if (!projectId) return;
+      
+      try {
+        console.log('ConversationInterface: Loading project data for:', projectId);
+        const project = await getProject(projectId);
+        
+        if (project) {
+          console.log('ConversationInterface: Project loaded successfully');
+          
+          // Load conversation history if available
+          if (project.conversation_history && project.conversation_history.length > 0) {
+            console.log('ConversationInterface: Loading conversation history');
+            const loadedMessages = project.conversation_history.map(msg => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              timestamp: new Date(msg.timestamp)
+            }));
+            setMessages(loadedMessages);
+          }
+          
+          // Load files if available
+          if (project.files && project.files.length > 0) {
+            console.log('ConversationInterface: Loading project files');
+            const loadedFiles = project.files.map(file => ({
+              id: file.id,
+              name: file.name,
+              path: file.path,
+              content: file.content,
+              language: file.path.split('.').pop() || 'text',
+              type: file.type,
+              createdAt: new Date(file.created_at),
+              updatedAt: new Date(file.updated_at)
+            }));
+            setGeneratedFiles(loadedFiles);
+            
+            // Select the first file by default
+            if (loadedFiles.length > 0 && !selectedFile) {
+              setSelectedFile(loadedFiles[0]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('ConversationInterface: Error loading project data:', err);
+        setError('Failed to load project data');
+      }
+    };
+    
+    loadProjectData();
+  }, [projectId]);
+
   // Initialize with welcome message
   useEffect(() => {
     if (messages.length === 0) {

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { Plus, Settings, Folder, Code, Package, X, Play, BookOpen } from 'lucide-react';
+import { Plus, Settings, Folder, Code, Package, X, Play, BookOpen, Trash2, Edit } from 'lucide-react';
 import ProjectCreationModal from '@/components/conversation/ProjectCreationModal';
 import ProjectSelectionModal from '@/components/conversation/ProjectSelectionModal';
+import ProjectEditModal from '@/components/conversation/ProjectEditModal';
 import ChromeApiSimulator from '@/components/chrome/ChromeApiSimulator';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
 import { Button } from '@/components/ui';
-import { createNewProject, getUserProjects, ProjectContext } from '@/lib/supabase-mcp';
+import { createNewProject, getUserProjects, deleteProject, updateProjectDetails, ProjectContext } from '@/lib/supabase-mcp';
 import { supabase } from '@/lib/supabase';
 
 // Define Project type for use in this component
@@ -29,6 +31,16 @@ export default function Dashboard() {
   const [showProjectSelectionModal, setShowProjectSelectionModal] = useState(false);
   const [showSimulator, setShowSimulator] = useState(false);
   const [apiKey, setApiKey] = useState('');
+  
+  // Delete confirmation state
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Edit project state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -38,6 +50,26 @@ export default function Dashboard() {
       const savedApiKey = localStorage.getItem('claude_api_key');
       if (!savedApiKey) {
         setShowApiKeyPrompt(true);
+      }
+      
+      // Check for bypass flag and clear it
+      const bypassMiddleware = localStorage.getItem('bypass_middleware');
+      if (bypassMiddleware === 'true') {
+        console.log('Dashboard - Bypass flag detected, clearing it');
+        localStorage.removeItem('bypass_middleware');
+        
+        // Force a session refresh to update the token with the latest metadata
+        const refreshSession = async () => {
+          try {
+            // Make a direct call to get the latest user data
+            const { data } = await supabase.auth.getUser();
+            console.log('Dashboard - User metadata:', data?.user?.user_metadata);
+          } catch (error) {
+            console.error('Error refreshing session:', error);
+          }
+        };
+        
+        refreshSession();
       }
     }
   }, [status, router]);
@@ -57,10 +89,12 @@ export default function Dashboard() {
   const loadProjects = async () => {
     setIsLoading(true);
     try {
+      console.log('Dashboard: Loading projects');
       const projectsData = await getUserProjects();
+      console.log(`Dashboard: Loaded ${projectsData.length} projects`);
       setProjects(projectsData);
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.error('Dashboard: Error loading projects:', error);
     } finally {
       setIsLoading(false);
     }
@@ -86,24 +120,17 @@ export default function Dashboard() {
         // Close the project modal
         setShowProjectModal(false);
         
-        // Scroll to the newly created project in the sidebar (using setTimeout to ensure the DOM has updated)
-        console.log('Dashboard: Setting timeout to scroll to project');
-        setTimeout(() => {
-          console.log('Dashboard: Attempting to scroll to project:', `project-${newProject.id}`);
-          const projectElement = document.getElementById(`project-${newProject.id}`);
-          if (projectElement) {
-            console.log('Dashboard: Project element found, scrolling into view');
-            projectElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else {
-            console.log('Dashboard: Project element not found in DOM');
-          }
-        }, 100);
+        // Navigate to the conversation page with the new project
+        console.log('Dashboard: Navigating to conversation page');
+        router.push(`/dashboard/conversation?projectId=${newProject.id}`);
       } else {
         console.error('Dashboard: createNewProject returned null');
-        throw new Error('Failed to create project');
+        throw new Error('Failed to create project: The server returned an empty response. Please try again later.');
       }
     } catch (error) {
       console.error('Dashboard: Error creating project:', error);
+      
+      // Rethrow the error to be handled by the ProjectCreationModal
       throw error;
     }
   };
@@ -138,6 +165,81 @@ export default function Dashboard() {
   // Toggle Chrome API Simulator visibility
   const toggleSimulator = () => {
     setShowSimulator(!showSimulator);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      console.log('Dashboard: Deleting project:', projectToDelete);
+      const success = await deleteProject(projectToDelete);
+      
+      if (success) {
+        console.log('Dashboard: Project deleted successfully');
+        // Remove the project from the state
+        setProjects(prev => prev.filter(p => p.id !== projectToDelete));
+        
+        // If the deleted project was selected, clear the selection
+        if (selectedProject === projectToDelete) {
+          setSelectedProject(null);
+        }
+      } else {
+        console.error('Dashboard: Failed to delete project');
+        alert('Failed to delete project. Please try again.');
+      }
+    } catch (error) {
+      console.error('Dashboard: Error deleting project:', error);
+      alert('An error occurred while deleting the project.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirmation(false);
+      setProjectToDelete(null);
+    }
+  };
+  
+  const confirmDeleteProject = (projectId: string, event: React.MouseEvent) => {
+    // Prevent the click from navigating to the project
+    event.preventDefault();
+    event.stopPropagation();
+    
+    setProjectToDelete(projectId);
+    setShowDeleteConfirmation(true);
+  };
+
+  const handleUpdateProject = async (projectId: string, name: string, description: string): Promise<void> => {
+    setIsEditing(true);
+    try {
+      console.log('Dashboard: Updating project:', projectId);
+      const success = await updateProjectDetails(projectId, name, description);
+      
+      if (success) {
+        console.log('Dashboard: Project updated successfully');
+        // Update the project in the state
+        setProjects(prev => prev.map(p => 
+          p.id === projectId 
+            ? { ...p, name, description, updated_at: new Date().toISOString() } 
+            : p
+        ));
+      } else {
+        console.error('Dashboard: Failed to update project');
+        throw new Error('Failed to update project');
+      }
+    } catch (error) {
+      console.error('Dashboard: Error updating project:', error);
+      throw error;
+    } finally {
+      setIsEditing(false);
+    }
+  };
+  
+  const openEditModal = (project: Project, event: React.MouseEvent) => {
+    // Prevent the click from navigating to the project
+    event.preventDefault();
+    event.stopPropagation();
+    
+    setProjectToEdit(project);
+    setShowEditModal(true);
   };
 
   if (status === 'loading') {
@@ -185,39 +287,51 @@ export default function Dashboard() {
         
         <div className="flex-1 overflow-y-auto p-4">
           <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Your Projects</h2>
-          {isLoading ? (
-            <div className="flex justify-center p-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
-            </div>
-          ) : (
-            <ul className="space-y-1">
-              {projects.map((project) => (
-                <li key={project.id}>
-                  <button
+          {/* Project list */}
+          <div className="space-y-1 mt-2">
+            {isLoading ? (
+              <div className="flex justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
+              </div>
+            ) : projects.length > 0 ? (
+              projects.map((project) => (
+                <div key={project.id} className="relative group">
+                  <a
                     id={`project-${project.id}`}
-                    onClick={() => setSelectedProject(project.id)}
-                    className={`w-full text-left px-3 py-2 rounded-md flex items-center ${
+                    href={`/dashboard/conversation?projectId=${project.id}`}
+                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-md w-full ${
                       selectedProject === project.id
-                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                        ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                     }`}
                   >
                     <Folder className="mr-2 h-4 w-4" />
                     <span className="truncate">{project.name}</span>
-                    {selectedProject === project.id && (
-                      <div className="ml-2 w-2 h-2 rounded-full bg-blue-500"></div>
-                    )}
-                  </button>
-                </li>
-              ))}
-              
-              {projects.length === 0 && (
-                <li className="text-sm text-gray-500 dark:text-gray-400 p-2">
-                  No projects yet. Create one to get started!
-                </li>
-              )}
-            </ul>
-          )}
+                  </a>
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 flex space-x-1">
+                    <button
+                      onClick={(e) => openEditModal(project, e)}
+                      className="text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400"
+                      title="Edit project"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => confirmDeleteProject(project.id, e)}
+                      className="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
+                      title="Delete project"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+                No projects yet
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="p-4 border-t dark:border-gray-700">
@@ -376,13 +490,29 @@ export default function Dashboard() {
                             </div>
                           </div>
                         </div>
-                        <div>
+                        <div className="flex space-x-2">
                           <Button
                             onClick={() => router.push(`/dashboard/conversation?projectId=${project.id}`)}
                             variant="outline"
                             size="sm"
                           >
                             Open
+                          </Button>
+                          <Button
+                            onClick={(e) => openEditModal(project, e)}
+                            variant="outline"
+                            size="sm"
+                            className="text-blue-500 hover:text-blue-700 border-blue-200 hover:border-blue-300 dark:text-blue-400 dark:hover:text-blue-300 dark:border-blue-800 dark:hover:border-blue-700"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            onClick={(e) => confirmDeleteProject(project.id, e)}
+                            variant="outline"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300 dark:text-red-400 dark:hover:text-red-300 dark:border-red-800 dark:hover:border-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -552,6 +682,36 @@ export default function Dashboard() {
         isLoading={isLoading}
         onCreateProject={handleCreateProject}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showDeleteConfirmation}
+        onClose={() => {
+          setShowDeleteConfirmation(false);
+          setProjectToDelete(null);
+        }}
+        onConfirm={handleDeleteProject}
+        title="Delete Project"
+        message="Are you sure you want to delete this project? This action cannot be undone and all project data, including files, conversations, and settings will be permanently deleted."
+        confirmButtonText="Delete Project"
+        isDestructive={true}
+        isLoading={isDeleting}
+      />
+      
+      {/* Edit Project Modal */}
+      {showEditModal && projectToEdit && (
+        <ProjectEditModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setProjectToEdit(null);
+          }}
+          onUpdateProject={handleUpdateProject}
+          projectId={projectToEdit.id}
+          initialName={projectToEdit.name}
+          initialDescription={projectToEdit.description}
+        />
+      )}
     </div>
   );
 }

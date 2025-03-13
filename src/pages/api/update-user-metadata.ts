@@ -1,77 +1,59 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from './auth/[...nextauth]';
 import { createClient } from '@supabase/supabase-js';
 
-// Environment variables for Supabase connection
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-// Initialize Supabase admin client with service role key
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client with service role key
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
   try {
-    // Get the session to verify the user is authenticated
-    const session = await getServerSession(req, res, authOptions);
+    const { userId, metadata, onboardingData } = req.body;
 
-    if (!session || !session.user) {
-      return res.status(401).json({ message: 'Unauthorized' });
+    if (!userId || !metadata || !onboardingData) {
+      return res.status(400).json({ message: 'Missing required data' });
     }
 
-    // Get request body
-    const { userId, metadata } = req.body;
-
-    // Verify the user is updating their own metadata
-    if (session.user.id !== userId) {
-      return res.status(403).json({ message: 'Forbidden: Cannot update metadata for another user' });
-    }
-
-    console.log('Server: Updating metadata for user:', userId);
-    console.log('Server: Metadata to update:', metadata);
-
-    // Update user metadata using admin client
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+    // Update user metadata
+    const { error: metadataError } = await supabase.auth.admin.updateUserById(
       userId,
       { user_metadata: metadata }
     );
 
-    if (error) {
-      console.error('Server: Error updating user metadata:', error);
-      return res.status(500).json({ message: error.message });
+    if (metadataError) {
+      console.error('Error updating user metadata:', metadataError);
+      return res.status(400).json({ message: metadataError.message });
     }
 
-    // Log success for debugging
-    console.log('Server: User metadata updated successfully:', data);
-    
-    // Return the updated user data
-    return res.status(200).json({ 
-      success: true, 
-      user: data.user,
-      debug: {
-        environment: process.env.NODE_ENV,
-        supabaseUrl: supabaseUrl ? 'configured' : 'missing',
-        serviceKey: supabaseServiceKey ? 'configured' : 'missing'
-      }
+    // Update user profile data
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .upsert({
+        id: userId,
+        first_name: onboardingData.first_name,
+        dev_experience: onboardingData.dev_experience,
+        onboarding_completed: true,
+      });
+
+    if (profileError) {
+      console.error('Error updating profile data:', profileError);
+      return res.status(400).json({ message: profileError.message });
+    }
+
+    return res.status(200).json({
+      message: 'User data updated successfully',
+      userId,
     });
-    
   } catch (error: any) {
-    console.error('Server: Unexpected error:', error);
-    return res.status(500).json({ 
-      message: error.message || 'An unexpected error occurred',
-      debug: {
-        environment: process.env.NODE_ENV,
-        supabaseUrl: supabaseUrl ? 'configured' : 'missing',
-        serviceKey: supabaseServiceKey ? 'configured' : 'missing'
-      }
-    });
+    console.error('Server error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 } 

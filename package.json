@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
     "lint": "next lint",
     "test": "jest",
     "format": "prettier --write \"**/*.{js,ts,tsx,json,md}\"",
@@ -47,6 +47,7 @@
     "slugify": "^1.6.6",
     "tailwind-merge": "^2.2.1",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0",
     "zod": "^3.22.4",
     "zustand": "^4.5.2"
   },
@@ -55,6 +56,7 @@
     "@types/node": "^20.11.25",
     "@types/react": "^18.2.57",
     "@types/react-dom": "^18.2.19",
+    "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.18",
     "dotenv": "^16.4.7",
     "eslint": "^8.57.0",

@@ -129,7 +129,7 @@ export const authOptions: NextAuthOptions = {
     },
     
     // Add user details to JWT token
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       // Initial sign in
       if (account && user) {
         // If signing in with OAuth and not test user, link account with Supabase
@@ -141,17 +141,19 @@ export const authOptions: NextAuthOptions = {
         token.name = user.name;
         token.email = user.email;
         token.picture = user.image;
-        
-        // Get user metadata from Supabase if not test user
-        if (user.id !== TEST_USER.id) {
-          try {
-            const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-            if (supabaseUser) {
-              token.user_metadata = supabaseUser.user_metadata || {};
-            }
-          } catch (error) {
-            console.error('Error getting user metadata:', error);
+      }
+      
+      // Always fetch fresh metadata from Supabase on every token refresh
+      if (token.sub && token.sub !== TEST_USER.id) {
+        try {
+          console.log('JWT callback - Fetching fresh user metadata');
+          const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+          if (supabaseUser) {
+            console.log('JWT callback - User metadata:', supabaseUser.user_metadata);
+            token.user_metadata = supabaseUser.user_metadata || {};
           }
+        } catch (error) {
+          console.error('Error getting user metadata:', error);
         }
       }
       
