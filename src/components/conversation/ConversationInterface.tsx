@@ -552,14 +552,14 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
     <div className="flex h-full border rounded-lg overflow-hidden bg-white dark:bg-gray-900">
       {/* Left panel - Conversation */}
       <div className="flex flex-col w-1/2 border-r">
-        <div className="p-4 border-b bg-gray-50 dark:bg-gray-800">
+        <div className="p-3 border-b bg-gray-50 dark:bg-gray-800">
           <h2 className="text-lg font-medium">Chrome Extension Builder</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Powered by Claude 3.7 Sonnet
           </p>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 h-[calc(100vh-12rem)] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+        <div className="flex-1 overflow-y-auto p-3 space-y-4 h-[calc(100vh-12rem)] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -614,7 +614,7 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
           <div ref={messagesEndRef} />
         </div>
         
-        <div className="p-4 border-t">
+        <div className="p-3 border-t">
           <div className="flex space-x-2">
             <Button variant="outline" size="icon">
               <Paperclip className="w-4 h-4" />

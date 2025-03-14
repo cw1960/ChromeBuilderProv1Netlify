@@ -86,7 +86,7 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
   return (
     <div className="w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col h-full">
-      <div className="p-4 border-b dark:border-gray-700">
+      <div className="p-3 border-b dark:border-gray-700">
         <Button 
           className="w-full justify-start" 
           onClick={onNewConversation}
@@ -97,12 +97,12 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       </div>
       
       <div className="flex-1 overflow-y-auto p-2">
-        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 px-2 mb-2">
+        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 px-1 mb-1">
           Conversations
         </h3>
         
         {isLoading ? (
-          <div className="flex justify-center p-4">
+          <div className="flex justify-center p-3">
             <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
           </div>
         ) : error ? (
@@ -117,7 +117,7 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               <li key={conversation.id}>
                 <button
                   onClick={() => handleSelectConversation(conversation.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md flex items-center justify-between group hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                  className={`w-full text-left px-2 py-1.5 rounded-md flex items-center justify-between group hover:bg-gray-100 dark:hover:bg-gray-700 ${
                     currentConversationId === conversation.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                   }`}
                 >

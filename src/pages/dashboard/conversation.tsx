@@ -305,7 +305,7 @@ export default function ConversationPage() {
           
           {/* Main Content */}
           <main className="flex-1 overflow-auto">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="max-w-full px-2 py-4">
               <ConversationInterface 
                 projectId={project?.id}
                 conversationId={typeof conversationId === 'string' ? conversationId : undefined}
