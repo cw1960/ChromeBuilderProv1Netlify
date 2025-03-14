@@ -5,8 +5,11 @@ import { getToken } from 'next-auth/jwt';
 // Define public routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/auth/signin',
+  '/auth/signin/',
   '/auth/signup',
+  '/auth/signup/',
   '/auth/error',
+  '/auth/error/',
   '/',
   '/landing'
 ];
@@ -42,14 +45,17 @@ export async function middleware(request: NextRequest) {
   
   console.log(`Middleware - Path: ${pathname}, Authenticated: ${isAuthenticated}`);
   
+  // Check if the path is a public route
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+  
   // Always allow access to public routes
-  if (PUBLIC_ROUTES.includes(pathname)) {
+  if (isPublicRoute) {
     console.log('Middleware - Public route access');
     return NextResponse.next();
   }
   
   // Handle unauthenticated users trying to access protected routes
-  if (!isAuthenticated && !PUBLIC_ROUTES.includes(pathname)) {
+  if (!isAuthenticated) {
     console.log('Middleware - Redirecting unauthenticated user to signin');
     const signinUrl = new URL('/auth/signin', request.url);
     signinUrl.searchParams.set('callbackUrl', encodeURI(request.url));
