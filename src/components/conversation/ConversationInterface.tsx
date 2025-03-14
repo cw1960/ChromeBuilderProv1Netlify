@@ -25,6 +25,7 @@ type CodeFile = {
 
 type ConversationInterfaceProps = {
   projectId?: string;
+  conversationId?: string;
   onCodeGenerated?: (code: string, path: string) => void;
   onComponentCreated?: (component: any) => void;
   onManifestUpdated?: (manifest: any) => void;
@@ -34,6 +35,7 @@ type ConversationInterfaceProps = {
 
 const ConversationInterface: React.FC<ConversationInterfaceProps> = ({
   projectId,
+  conversationId,
   onCodeGenerated,
   onComponentCreated,
   onManifestUpdated,
@@ -103,6 +105,41 @@ const ConversationInterface: React.FC<ConversationInterfaceProps> = ({
     
     loadProjectData();
   }, [projectId]);
+
+  // Load conversation data when conversationId changes
+  useEffect(() => {
+    const loadConversationData = async () => {
+      if (!conversationId) return;
+      
+      try {
+        console.log('ConversationInterface: Loading conversation data for:', conversationId);
+        const response = await fetch(`/api/conversations/${conversationId}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to load conversation');
+        }
+        
+        const conversation = await response.json();
+        console.log('ConversationInterface: Conversation loaded successfully');
+        
+        // Set messages from conversation
+        if (conversation.messages && conversation.messages.length > 0) {
+          const loadedMessages = conversation.messages.map((msg: any) => ({
+            id: msg.id || crypto.randomUUID(),
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp || Date.now())
+          }));
+          setMessages(loadedMessages);
+        }
+      } catch (err) {
+        console.error('ConversationInterface: Error loading conversation data:', err);
+        setError('Failed to load conversation data');
+      }
+    };
+    
+    loadConversationData();
+  }, [conversationId]);
 
   // Initialize with welcome message
   useEffect(() => {
@@ -393,6 +430,32 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
     setIsSaving(true);
     
     try {
+      // If we have a specific conversation ID, update that conversation
+      if (conversationId) {
+        console.log('ConversationInterface: Updating existing conversation:', conversationId);
+        const response = await fetch(`/api/conversations/${conversationId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: messages.map(msg => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              timestamp: msg.timestamp.toISOString()
+            }))
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to update conversation');
+        }
+        
+        console.log('ConversationInterface: Conversation updated successfully');
+      }
+      
+      // Always save to the project as well (for files and other data)
       const success = await onSaveConversation(messages, generatedFiles);
       
       if (success) {

@@ -378,14 +378,6 @@ export default function Dashboard() {
             <Plus className="mr-2 h-4 w-4" />
             New Extension
           </Button>
-          <Button 
-            variant="outline" 
-            className="w-full justify-start" 
-            onClick={() => setShowProjectSelectionModal(true)}
-          >
-            <Code className="mr-2 h-4 w-4" />
-            New Conversation
-          </Button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4">
@@ -452,16 +444,6 @@ export default function Dashboard() {
                         </dd>
                       </dl>
                     </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-700 px-5 py-3">
-                  <div className="text-sm">
-                    <button
-                      onClick={() => setShowProjectSelectionModal(true)}
-                      className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500"
-                    >
-                      Start new conversation
-                    </button>
                   </div>
                 </div>
               </div>
@@ -558,24 +540,6 @@ export default function Dashboard() {
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         Start building a new Chrome extension
-                      </p>
-                    </div>
-                  </button>
-                  
-                  <button
-                    onClick={() => setShowProjectSelectionModal(true)}
-                    className="relative rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-gray-400 dark:hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    <div className="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                      <Code className="h-6 w-6 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="absolute inset-0" aria-hidden="true"></span>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        New Conversation
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Start a new AI conversation for an existing project
                       </p>
                     </div>
                   </button>

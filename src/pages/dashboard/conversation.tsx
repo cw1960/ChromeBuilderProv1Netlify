@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { ArrowLeft, Save, Download, Edit, LogOut } from 'lucide-react';
 import ConversationInterface from '@/components/conversation/ConversationInterface';
 import ProjectEditModal from '@/components/conversation/ProjectEditModal';
+import ConversationSidebar from '@/components/conversation/ConversationSidebar';
 import { saveConversationAndCode, getProject, createNewProject, updateProjectDetails, ProjectContext } from '@/lib/supabase-mcp';
 import DashboardHeader from '@/components/layout/DashboardHeader';
 
 export default function ConversationPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { projectId } = router.query;
+  const { projectId, conversationId } = router.query;
   
   const [project, setProject] = useState<ProjectContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,6 +92,38 @@ export default function ConversationPage() {
     // This is handled by the ConversationInterface component now
   };
   
+  // Handle creating a new conversation
+  const handleNewConversation = async () => {
+    if (!project?.id) return;
+    
+    try {
+      console.log('Conversation: Creating new conversation');
+      const response = await fetch('/api/conversations/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          title: `Conversation ${new Date().toLocaleString()}`
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create conversation');
+      }
+      
+      const conversation = await response.json();
+      console.log('Conversation: New conversation created:', conversation.id);
+      
+      // Navigate to the new conversation
+      router.push(`/dashboard/conversation?projectId=${project.id}&conversationId=${conversation.id}`);
+    } catch (err) {
+      console.error('Conversation: Error creating conversation:', err);
+      alert('Failed to create new conversation');
+    }
+  };
+  
   // Handle saving conversation and code
   const handleSaveConversation = async (messages: any[], files: any[]) => {
     if (!project) {
@@ -127,29 +160,29 @@ export default function ConversationPage() {
         setIsSaving(false);
         return false;
       }
-    } else {
-      // Save to existing project
-      console.log('Conversation: Saving conversation and code to existing project:', project.id);
-      setIsSaving(true);
-      const result = await saveConversationAndCode(project.id, messages, files);
-      setIsSaving(false);
-      
-      // Reload the project to get the latest data
-      if (result) {
-        try {
-          console.log('Conversation: Reloading project after save');
-          const updatedProject = await getProject(project.id);
-          if (updatedProject) {
-            console.log('Conversation: Project reloaded successfully');
-            setProject(updatedProject);
-          }
-        } catch (err) {
-          console.error('Conversation: Error reloading project after save:', err);
-        }
-      }
-      
-      return result;
     }
+    
+    // Save to existing project
+    console.log('Conversation: Saving conversation and code to existing project:', project.id);
+    setIsSaving(true);
+    const result = await saveConversationAndCode(project.id, messages, files);
+    setIsSaving(false);
+    
+    // Reload the project to get the latest data
+    if (result) {
+      try {
+        console.log('Conversation: Reloading project after save');
+        const updatedProject = await getProject(project.id);
+        if (updatedProject) {
+          console.log('Conversation: Project reloaded successfully');
+          setProject(updatedProject);
+        }
+      } catch (err) {
+        console.error('Conversation: Error reloading project after save:', err);
+      }
+    }
+    
+    return result;
   };
   
   const handleUpdateProject = async (projectId: string, name: string, description: string): Promise<void> => {
@@ -207,32 +240,22 @@ export default function ConversationPage() {
       </div>
     );
   }
-
+  
   // Render error state
   if (error) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-        <DashboardHeader title="Project not found" />
+        <DashboardHeader title="Error" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-6">
             <div className="flex flex-col items-center justify-center py-12">
-              <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 p-4 rounded-full mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Project not found</h3>
-              <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
-                {error === 'Project not found' 
-                  ? "We couldn't find the project you're looking for. It may have been deleted or you may not have access to it."
-                  : error}
+              <h3 className="text-lg font-medium text-red-600 dark:text-red-400 mb-2">Error Loading Project</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                {error}
               </p>
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md"
-              >
+              <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">
                 Return to Dashboard
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -246,7 +269,7 @@ export default function ConversationPage() {
         <title>Chrome Extension Builder - {project ? project.name : 'Conversation'}</title>
       </Head>
       
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
         <DashboardHeader title={project ? project.name : 'New Chrome Extension'}>
           <div className="flex items-center ml-4">
             <Link href="/dashboard" className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 mr-4">
@@ -270,13 +293,28 @@ export default function ConversationPage() {
           </div>
         </DashboardHeader>
         
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <ConversationInterface 
-            projectId={project?.id}
-            onCodeGenerated={handleCodeGenerated}
-            onSaveConversation={handleSaveConversation}
-          />
-        </main>
+        <div className="flex flex-1 overflow-hidden">
+          {/* Conversation Sidebar */}
+          {project && (
+            <ConversationSidebar 
+              projectId={project.id}
+              currentConversationId={typeof conversationId === 'string' ? conversationId : undefined}
+              onNewConversation={handleNewConversation}
+            />
+          )}
+          
+          {/* Main Content */}
+          <main className="flex-1 overflow-auto">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+              <ConversationInterface 
+                projectId={project?.id}
+                conversationId={typeof conversationId === 'string' ? conversationId : undefined}
+                onCodeGenerated={handleCodeGenerated}
+                onSaveConversation={handleSaveConversation}
+              />
+            </div>
+          </main>
+        </div>
       </div>
       
       {/* Edit Project Modal */}
