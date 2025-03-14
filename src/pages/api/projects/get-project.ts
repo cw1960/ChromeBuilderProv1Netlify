@@ -97,15 +97,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     
     // Get conversations
-    const { data: conversations, error: conversationsError } = await supabaseAdmin
+    const { data: conversationsData, error: conversationsError } = await supabaseAdmin
       .from('conversations')
       .select('*')
       .eq('project_id', projectId)
       .order('updated_at', { ascending: false });
     
+    let finalConversations = conversationsData;
     if (conversationsError) {
-      console.error('Get Project API: Error fetching conversations:', conversationsError);
-      // Continue anyway, we'll just return an empty array
+      // If the error is about a missing table or column, just treat it as no conversations
+      if (conversationsError.code === '42P01' || conversationsError.code === '42703') {
+        console.log('Get Project API: Conversations table or column not found, treating as empty');
+        finalConversations = [];
+      } else {
+        console.error('Get Project API: Error fetching conversations:', conversationsError);
+        finalConversations = [];
+      }
     }
     
     // Return the project with all related data
@@ -114,7 +121,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       files: files || [],
       settings: settings,
       deployment_history: deploymentHistory || [],
-      conversation_history: conversations || []
+      conversation_history: finalConversations || []
     };
     
     console.log('Get Project API: Successfully fetched project with all related data');
