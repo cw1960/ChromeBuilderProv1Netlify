@@ -2,6 +2,7 @@ import { AppProps } from 'next/app';
 import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import dynamic from 'next/dynamic';
+import { ProjectRefreshProvider } from '../contexts/ProjectRefreshContext';
 import '../styles/globals.css';
 
 // Create a client-side only component for the app content
@@ -36,7 +37,9 @@ function MyApp({ Component, pageProps }: AppProps) {
   return (
     <SessionProvider session={pageProps.session}>
       <ThemeProvider attribute="class" defaultTheme="dark">
-        <AppContent Component={Component} pageProps={pageProps} />
+        <ProjectRefreshProvider>
+          <AppContent Component={Component} pageProps={pageProps} />
+        </ProjectRefreshProvider>
       </ThemeProvider>
     </SessionProvider>
   );

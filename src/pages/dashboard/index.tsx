@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { Plus, Settings, Folder, Code, Package, X, Play, BookOpen, Trash2, Edit, LogOut } from 'lucide-react';
 import ProjectCreationModal from '@/components/conversation/ProjectCreationModal';
@@ -11,6 +11,10 @@ import { Button } from '@/components/ui';
 import { createNewProject, getUserProjects, deleteProject, updateProjectDetails, ProjectContext } from '@/lib/supabase-mcp';
 import { supabase } from '@/lib/supabase';
 import DashboardHeader from '@/components/layout/DashboardHeader';
+import ProjectsList from '@/components/dashboard/ProjectsList';
+import RecentProjects from '@/components/dashboard/RecentProjects';
+import ProjectStats from '@/components/dashboard/ProjectStats';
+import { useProjectRefresh } from '@/contexts/ProjectRefreshContext';
 
 // Define Project type for use in this component
 type Project = {
@@ -47,6 +51,8 @@ export default function Dashboard() {
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
 
+  const { refreshTrigger, triggerRefresh } = useProjectRefresh();
+
   useEffect(() => {
     if (status === 'authenticated') {
       loadProjects();
@@ -77,7 +83,23 @@ export default function Dashboard() {
         refreshSession();
       }
     }
-  }, [status, router]);
+  }, [status, router.asPath]);
+
+  // Add an effect to reload projects when the window regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (status === 'authenticated') {
+        console.log('Dashboard: Window focused, reloading projects');
+        loadProjects();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [status]);
 
   useEffect(() => {
     console.log('showProjectModal state changed:', showProjectModal);
@@ -95,7 +117,19 @@ export default function Dashboard() {
     setIsLoading(true);
     try {
       console.log('Dashboard: Loading projects');
-      const projectsData = await getUserProjects();
+      // Add a timestamp to avoid caching issues
+      const timestamp = new Date().getTime();
+      
+      // Get the user ID from the session
+      if (!session?.user?.id) {
+        console.error('Dashboard: No user ID found in session');
+        return;
+      }
+      
+      const userId = session.user.id;
+      console.log(`Dashboard: Loading projects for user ${userId}`);
+      
+      const projectsData = await getUserProjects(timestamp, userId);
       console.log(`Dashboard: Loaded ${projectsData.length} projects`);
       setProjects(projectsData);
     } catch (error) {
@@ -128,6 +162,9 @@ export default function Dashboard() {
         
         // Add a longer delay before navigation to ensure database operations complete
         console.log('Dashboard: Adding delay before navigation');
+        
+        // Reload the projects list to include the new project
+        await loadProjects();
         
         // Verify the project exists in the database before navigating
         const verifyProject = async () => {
@@ -219,6 +256,9 @@ export default function Dashboard() {
         if (selectedProject === projectToDelete) {
           setSelectedProject(null);
         }
+        
+        // Trigger refresh for all components
+        triggerRefresh();
       } else {
         console.error('Dashboard: Failed to delete project');
         alert('Failed to delete project. Please try again.');
@@ -277,6 +317,34 @@ export default function Dashboard() {
     setShowEditModal(true);
   };
 
+  // Debug function to check session and projects
+  const debugSession = async () => {
+    try {
+      console.log('Debug - Session:', session);
+      
+      // Fetch session data from debug endpoint
+      const sessionResponse = await fetch('/api/debug/session');
+      const sessionData = await sessionResponse.json();
+      console.log('Debug - Session API response:', sessionData);
+      
+      // Fetch projects directly from Supabase
+      if (session?.user?.id) {
+        const { data: projects, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('user_id', session.user.id);
+        
+        console.log('Debug - Direct Supabase query for projects:', { projects, error });
+      }
+      
+      // Show alert with basic info
+      alert(`Session status: ${status}\nUser ID: ${session?.user?.id || 'Not found'}\nCheck console for details`);
+    } catch (error) {
+      console.error('Debug error:', error);
+      alert('Error during debug. Check console.');
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -324,48 +392,10 @@ export default function Dashboard() {
           <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Your Projects</h2>
           {/* Project list */}
           <div className="space-y-1 mt-2">
-            {isLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : projects.length > 0 ? (
-              projects.map((project) => (
-                <div key={project.id} className="relative group">
-                  <a
-                    id={`project-${project.id}`}
-                    href={`/dashboard/conversation?projectId=${project.id}`}
-                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-md w-full ${
-                      selectedProject === project.id
-                        ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white'
-                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    <Folder className="mr-2 h-4 w-4" />
-                    <span className="truncate">{project.name}</span>
-                  </a>
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 flex space-x-1">
-                    <button
-                      onClick={(e) => openEditModal(project, e)}
-                      className="text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400"
-                      title="Edit project"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={(e) => confirmDeleteProject(project.id, e)}
-                      className="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
-                      title="Delete project"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
-                No projects yet
-              </div>
-            )}
+            <ProjectsList 
+              onEditProject={openEditModal}
+              onDeleteProject={confirmDeleteProject}
+            />
           </div>
         </div>
         
@@ -391,25 +421,7 @@ export default function Dashboard() {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
               <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
-                      <Folder className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                          Total Projects
-                        </dt>
-                        <dd className="flex items-baseline">
-                          <div className="text-2xl font-semibold text-gray-900 dark:text-white">
-                            {projects.length}
-                          </div>
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
+                <ProjectStats />
                 <div className="bg-gray-50 dark:bg-gray-700 px-5 py-3">
                   <div className="text-sm">
                     <button
@@ -498,62 +510,10 @@ export default function Dashboard() {
                 </p>
               </div>
               <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                {isLoading ? (
-                  <li className="px-4 py-4 sm:px-6">
-                    <div className="flex justify-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
-                    </div>
-                  </li>
-                ) : projects.length > 0 ? (
-                  projects.slice(0, 5).map((project) => (
-                    <li key={project.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0">
-                            <Folder className="h-8 w-8 text-gray-400" />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">
-                              {project.name}
-                            </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-md">
-                              {project.description}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          <Button
-                            onClick={() => router.push(`/dashboard/conversation?projectId=${project.id}`)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Open
-                          </Button>
-                          <Button
-                            onClick={(e) => openEditModal(project, e)}
-                            variant="outline"
-                            size="sm"
-                            className="text-blue-500 hover:text-blue-700 border-blue-200 hover:border-blue-300 dark:text-blue-400 dark:hover:text-blue-300 dark:border-blue-800 dark:hover:border-blue-700"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            onClick={(e) => confirmDeleteProject(project.id, e)}
-                            variant="outline"
-                            size="sm"
-                            className="text-red-500 hover:text-red-700 border-red-200 hover:border-red-300 dark:text-red-400 dark:hover:text-red-300 dark:border-red-800 dark:hover:border-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </li>
-                  ))
-                ) : (
-                  <li className="px-4 py-4 sm:px-6 text-center text-gray-500 dark:text-gray-400">
-                    No projects yet. Create one to get started!
-                  </li>
-                )}
+                <RecentProjects 
+                  onEditProject={openEditModal}
+                  onDeleteProject={confirmDeleteProject}
+                />
               </ul>
               {projects.length > 5 && (
                 <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-right sm:px-6">
@@ -742,6 +702,15 @@ export default function Dashboard() {
           initialName={projectToEdit.name}
           initialDescription={projectToEdit.description}
         />
+      )}
+      
+      {/* Debug button - only visible in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <Button onClick={debugSession} variant="outline" size="sm">
+            Debug Session
+          </Button>
+        </div>
       )}
     </div>
   );
