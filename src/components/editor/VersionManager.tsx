@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
-  DialogHeader, 
   DialogTitle, 
-  DialogFooter, 
   DialogDescription
 } from '@radix-ui/react-dialog';
+import {
+  DialogHeader,
+  DialogFooter
+} from '@/components/ui/dialog';
 import { 
   Clock, 
   Tag, 

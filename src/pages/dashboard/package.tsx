@@ -5,6 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { PackageManager } from '@/components/editor';
 import { getProject, ProjectContext } from '@/lib/supabase-mcp';
+import DashboardHeader from '@/components/layout/DashboardHeader';
 
 export default function PackagePage() {
   const { data: session, status } = useSession();
@@ -58,58 +59,42 @@ export default function PackagePage() {
         <title>Package | {project.name} | ChromeBuilder Pro</title>
       </Head>
 
-      <header className="border-b border-border">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center">
-            <Link href="/dashboard" className="text-2xl font-bold">
-              ChromeBuilder Pro
-            </Link>
-            
-            <span className="mx-2 text-muted-foreground">/</span>
-            <Link 
-              href="/dashboard"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              Projects
-            </Link>
-            
-            <span className="mx-2 text-muted-foreground">/</span>
-            <Link 
-              href={`/dashboard/generator?projectId=${projectId}`}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              {project.name}
-            </Link>
-            
-            <span className="mx-2 text-muted-foreground">/</span>
-            <span className="text-sm font-medium text-foreground">
-              Package
-            </span>
-          </div>
+      <DashboardHeader title="Package">
+        <div className="flex items-center ml-4">
+          <Link 
+            href="/dashboard"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Projects
+          </Link>
           
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-4">
-              <Link
-                href={`/dashboard/versions?projectId=${projectId}`}
-                className="text-sm text-primary hover:underline"
-              >
-                Version History
-              </Link>
-              <span className="text-sm text-muted-foreground">
-                {session?.user?.email}
-              </span>
-              <Link 
-                href="/api/auth/signout"
-                className="text-sm text-primary hover:underline"
-              >
-                Sign out
-              </Link>
-            </div>
-          </div>
+          <span className="mx-2 text-muted-foreground">/</span>
+          <Link 
+            href={`/dashboard/generator?projectId=${projectId}`}
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            {project.name}
+          </Link>
+          
+          <span className="mx-2 text-muted-foreground">/</span>
+          <span className="text-sm font-medium text-foreground">
+            Package
+          </span>
         </div>
-      </header>
+      </DashboardHeader>
 
-      <PackageManager projectId={projectId as string} />
+      <main className="container mx-auto p-4">
+        <div className="mb-4">
+          <Link
+            href={`/dashboard/versions?projectId=${projectId}`}
+            className="text-sm text-primary hover:underline"
+          >
+            Version History
+          </Link>
+        </div>
+        
+        <PackageManager projectId={projectId as string} />
+      </main>
     </div>
   );
 }

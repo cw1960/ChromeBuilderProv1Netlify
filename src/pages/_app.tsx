@@ -1,10 +1,15 @@
 import { AppProps } from 'next/app';
 import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
-import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import '../styles/globals.css';
 
-function MyApp({ Component, pageProps }: AppProps) {
+// Create a client-side only component for the app content
+const AppContent = dynamic(() => Promise.resolve(({ Component, pageProps }: {
+  Component: AppProps['Component'];
+  pageProps: AppProps['pageProps'];
+}) => {
+  const { useState, useEffect } = require('react');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -24,10 +29,14 @@ function MyApp({ Component, pageProps }: AppProps) {
     );
   }
 
+  return <Component {...pageProps} />;
+}), { ssr: false });
+
+function MyApp({ Component, pageProps }: AppProps) {
   return (
     <SessionProvider session={pageProps.session}>
       <ThemeProvider attribute="class" defaultTheme="dark">
-        <Component {...pageProps} />
+        <AppContent Component={Component} pageProps={pageProps} />
       </ThemeProvider>
     </SessionProvider>
   );

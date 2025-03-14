@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { ArrowLeft, Save, Download, Edit } from 'lucide-react';
+import { ArrowLeft, Save, Download, Edit, LogOut } from 'lucide-react';
 import ConversationInterface from '@/components/conversation/ConversationInterface';
 import ProjectEditModal from '@/components/conversation/ProjectEditModal';
 import { saveConversationAndCode, getProject, createNewProject, updateProjectDetails, ProjectContext } from '@/lib/supabase-mcp';
+import DashboardHeader from '@/components/layout/DashboardHeader';
 
 export default function ConversationPage() {
   const { data: session, status } = useSession();
@@ -30,15 +31,21 @@ export default function ConversationPage() {
       try {
         console.log('Conversation: Loading project:', projectId);
         setIsLoading(true);
-        const projectData = await getProject(projectId);
         
-        if (!projectData) {
-          console.error('Conversation: Project not found:', projectId);
+        // Use the direct API endpoint to get the project
+        console.log('Conversation: Fetching project from API');
+        const response = await fetch(`/api/projects/get-project?projectId=${projectId}`);
+        
+        if (!response.ok) {
+          console.error('Conversation: Error fetching project from API:', await response.text());
           setError('Project not found');
-        } else {
-          console.log('Conversation: Project loaded successfully:', projectData.name);
-          setProject(projectData);
+          setIsLoading(false);
+          return;
         }
+        
+        const data = await response.json();
+        console.log('Conversation: Project loaded successfully from API:', data.project.name);
+        setProject(data.project);
       } catch (err) {
         console.error('Conversation: Error loading project:', err);
         setError('Failed to load project');
@@ -181,6 +188,58 @@ export default function ConversationPage() {
     return null;
   }
   
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+        <DashboardHeader title="Loading Project" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-6">
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Loading Project</h3>
+              <p className="text-gray-500 dark:text-gray-400">
+                Please wait while we load your project...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+        <DashboardHeader title="Project not found" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-6">
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 p-4 rounded-full mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Project not found</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
+                {error === 'Project not found' 
+                  ? "We couldn't find the project you're looking for. It may have been deleted or you may not have access to it."
+                  : error}
+              </p>
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <>
       <Head>
@@ -188,56 +247,35 @@ export default function ConversationPage() {
       </Head>
       
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <header className="bg-white dark:bg-gray-800 shadow">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <div className="flex items-center">
-              <Link href="/dashboard" className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 mr-4">
-                <ArrowLeft className="w-5 h-5 mr-1" />
-                Back to Dashboard
-              </Link>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
-                {project ? project.name : 'New Chrome Extension'}
-                {project && (
-                  <button
-                    onClick={() => setShowEditModal(true)}
-                    className="ml-2 text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400"
-                    title="Edit project details"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                )}
-              </h1>
-              {isSaving && (
-                <span className="ml-4 text-sm text-gray-500 dark:text-gray-400">
-                  Saving...
-                </span>
-              )}
-            </div>
+        <DashboardHeader title={project ? project.name : 'New Chrome Extension'}>
+          <div className="flex items-center ml-4">
+            <Link href="/dashboard" className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 mr-4">
+              <ArrowLeft className="w-5 h-5 mr-1" />
+              Back to Dashboard
+            </Link>
+            {project && (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="ml-2 text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400"
+                title="Edit project details"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+            )}
+            {isSaving && (
+              <span className="ml-4 text-sm text-gray-500 dark:text-gray-400">
+                Saving...
+              </span>
+            )}
           </div>
-        </header>
+        </DashboardHeader>
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-            </div>
-          ) : error ? (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-              <p className="text-red-700 dark:text-red-400">{error}</p>
-              <button 
-                onClick={() => router.push('/dashboard')}
-                className="mt-2 inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                Return to Dashboard
-              </button>
-            </div>
-          ) : (
-            <ConversationInterface 
-              projectId={project?.id}
-              onCodeGenerated={handleCodeGenerated}
-              onSaveConversation={handleSaveConversation}
-            />
-          )}
+          <ConversationInterface 
+            projectId={project?.id}
+            onCodeGenerated={handleCodeGenerated}
+            onSaveConversation={handleSaveConversation}
+          />
         </main>
       </div>
       

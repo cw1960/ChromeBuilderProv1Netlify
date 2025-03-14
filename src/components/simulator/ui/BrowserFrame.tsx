@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MoreHorizontal, Plus, X, Refresh, ChevronLeft, ChevronRight, Shield, Search } from 'lucide-react';
+import { MoreHorizontal, Plus, X, RefreshCw, ChevronLeft, ChevronRight, Shield, Search } from 'lucide-react';
 import { Tab } from '../mocks/types';
 
 interface BrowserFrameProps {
@@ -98,7 +98,7 @@ export default function BrowserFrame({
               <ChevronRight size={16} />
             </button>
             <button className="p-1 rounded-full hover:bg-gray-200" onClick={onRefresh}>
-              <Refresh size={16} />
+              <RefreshCw size={16} />
             </button>
           </div>
           

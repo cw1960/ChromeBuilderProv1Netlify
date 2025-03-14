@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import { ScreenshotGenerator } from '../../components/editor';
-import { Button } from '@radix-ui/react-button';
+import Button from '../../components/ui/Button';
 import { ArrowLeft, Save } from 'lucide-react';
 import Link from 'next/link';
 

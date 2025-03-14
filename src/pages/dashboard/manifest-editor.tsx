@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ManifestEditor } from '@/components/editor';
 import { getProject, saveProject, ChromeManifest, ProjectContext } from '@/lib/supabase-mcp';
 import { AlertTriangle, Save, ArrowLeft, Image } from 'lucide-react';
+import DashboardHeader from '@/components/layout/DashboardHeader';
 
 export default function ManifestEditorPage() {
   const router = useRouter();
@@ -123,37 +124,32 @@ export default function ManifestEditorPage() {
   
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center">
-            <h1 className="text-2xl font-bold">Manifest Editor</h1>
-            <span className="ml-4 text-sm text-muted-foreground">
-              {project?.name}
-            </span>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={handleBack}
-              className="flex items-center rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </button>
-            
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader title="Manifest Editor">
+        <span className="ml-4 text-sm text-muted-foreground">
+          {project?.name}
+        </span>
+      </DashboardHeader>
       
-      <main className="container mx-auto p-4">
+      <div className="container mx-auto p-4">
+        <div className="flex justify-end space-x-4 mb-4">
+          <button
+            onClick={handleBack}
+            className="flex items-center rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </button>
+          
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+        
         {error && (
           <div className="mb-4 rounded-md bg-destructive/15 p-4 text-destructive">
             {error}
@@ -361,7 +357,7 @@ export default function ManifestEditorPage() {
             }}
           />
         </div>
-      </main>
+      </div>
     </div>
   );
 }
