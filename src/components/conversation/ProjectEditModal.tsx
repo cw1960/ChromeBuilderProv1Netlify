@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui';
 import { X, Check } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface ProjectEditModalProps {
   isOpen: boolean;
@@ -23,7 +24,6 @@ export default function ProjectEditModal({
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   // Initialize form with project details
   useEffect(() => {
@@ -31,7 +31,6 @@ export default function ProjectEditModal({
       setName(initialName);
       setDescription(initialDescription);
       setError(null);
-      setSuccess(false);
     }
   }, [isOpen, initialName, initialDescription]);
 
@@ -47,16 +46,21 @@ export default function ProjectEditModal({
     setError(null);
     
     try {
-      await onUpdateProject(projectId, name, description);
-      setSuccess(true);
+      console.log('ProjectEditModal: Updating project', projectId);
+      const updateToast = toast.loading('Updating project...');
       
-      // Close the modal after a short delay to show success message
+      await onUpdateProject(projectId, name, description);
+      
+      toast.success('Project updated successfully', { id: updateToast });
+      
+      // Close the modal after a short delay
       setTimeout(() => {
         onClose();
-      }, 1500);
+      }, 500);
     } catch (err) {
-      console.error('Error updating project:', err);
+      console.error('ProjectEditModal: Error updating project:', err);
       setError('Failed to update project. Please try again.');
+      toast.error('Failed to update project');
     } finally {
       setIsSubmitting(false);
     }
@@ -81,13 +85,6 @@ export default function ProjectEditModal({
         {error && (
           <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-md">
             {error}
-          </div>
-        )}
-        
-        {success && (
-          <div className="mb-4 p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-md flex items-center">
-            <Check className="h-5 w-5 mr-2" />
-            Project updated successfully!
           </div>
         )}
         

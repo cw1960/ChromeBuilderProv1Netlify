@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 // import { createMcpClient } from '@smithery/client';
 import { createId } from '@paralleldrive/cuid2';
 import { v4 as uuidv4 } from 'uuid';
+import { ProjectFileType, Project, ProjectContext } from '@/types/project';
+import { Message } from '@/types/message';
+import { CodeFile } from '@/types/code';
 // Remove the import from @/types
 
 // Create a Supabase client
@@ -31,19 +34,41 @@ export const mcpClient = {
 };
 
 // ProjectContext type definition
-export interface ProjectContext {
-  id: string;
-  name: string;
-  description: string;
-  version: string;
-  created_at: string;
-  updated_at: string;
-  manifest: ChromeManifest;
-  files: ProjectFile[];
-  settings: ProjectSettings;
-  deployment_history: DeploymentRecord[];
-  conversation_history?: ConversationEntry[];
-}
+// This interface is now imported from @/types/project
+// export interface ProjectContext {
+//   id: string;
+//   name: string;
+//   description: string;
+//   created_at: string;
+//   updated_at: string;
+//   user_id: string;
+//   version: string;
+//   manifest: any;
+//   files: {
+//     id: string;
+//     name: string;
+//     path: string;
+//     type: ProjectFileType;
+//     content: string;
+//     created_at: string;
+//     updated_at: string;
+//     metadata: {
+//       language: string;
+//     };
+//   }[];
+//   conversation_history: {
+//     id: string;
+//     timestamp: string;
+//     role: 'user' | 'assistant' | 'system';
+//     content: string;
+//     metadata: {
+//       tokens_used: number;
+//       files_modified: string[];
+//     };
+//   }[];
+//   settings?: Record<string, any>;
+//   metadata?: Record<string, any>;
+// }
 
 // Chrome extension manifest interface
 export interface ChromeManifest {
@@ -87,16 +112,6 @@ export interface ProjectFile {
   created_at: string;
   updated_at: string;
   metadata?: Record<string, any>;
-}
-
-// File types in a Chrome extension project
-export enum ProjectFileType {
-  HTML = 'html',
-  CSS = 'css',
-  JAVASCRIPT = 'javascript',
-  JSON = 'json',
-  IMAGE = 'image',
-  OTHER = 'other'
 }
 
 // Project settings interface
@@ -339,8 +354,8 @@ export async function getProject(projectId: string): Promise<ProjectContext | nu
 }
 
 // Get all projects for the current user
-export async function getUserProjects(): Promise<ProjectContext[]> {
-  console.log('getUserProjects: Fetching user projects');
+export async function getUserProjects(timestamp?: number, userId?: string): Promise<ProjectContext[]> {
+  console.log('getUserProjects: Fetching user projects', timestamp ? `with timestamp ${timestamp}` : '', userId ? `for user ${userId}` : '');
   
   // Check if we're in development mode
   const isDev = process.env.NODE_ENV === 'development';
@@ -359,12 +374,12 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
         
         // If we're in development mode and have local projects, return them immediately
         // We'll still try to fetch from the database in the background
-        if (localProjects.length > 0) {
+        if (localProjects.length > 0 && !timestamp) {
           console.log('getUserProjects: Returning localStorage projects immediately');
           
           // Try to fetch from database in the background to keep localStorage in sync
           setTimeout(() => {
-            fetchProjectsFromDatabase().then(dbProjects => {
+            fetchProjectsFromDatabase(userId).then(dbProjects => {
               if (dbProjects.length > 0) {
                 // Merge local and database projects, preferring database versions
                 const mergedProjects = mergeProjects(localProjects, dbProjects);
@@ -378,8 +393,6 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
           
           return localProjects;
         }
-      } else {
-        console.log('getUserProjects: No projects found in localStorage');
       }
     } catch (error) {
       console.error('getUserProjects: Error reading from localStorage:', error);
@@ -389,7 +402,7 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
   
   try {
     // Fetch projects from database
-    const dbProjects = await fetchProjectsFromDatabase();
+    const dbProjects = await fetchProjectsFromDatabase(userId);
     
     // If we have database projects, return them
     if (dbProjects.length > 0) {
@@ -439,29 +452,40 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
 }
 
 // Helper function to fetch projects from database
-async function fetchProjectsFromDatabase(): Promise<ProjectContext[]> {
+async function fetchProjectsFromDatabase(userId?: string): Promise<ProjectContext[]> {
   console.log('fetchProjectsFromDatabase: Fetching projects from database');
   
   try {
-    // Get the current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Use provided userId or try to get from Supabase auth
+    let authenticatedUserId = userId;
     
-    if (userError) {
-      console.error('fetchProjectsFromDatabase: Error getting user:', userError);
-      throw userError;
-    }
-    
-    if (!user) {
-      console.warn('fetchProjectsFromDatabase: No authenticated user found');
-      throw new Error('Authentication required to get projects');
+    if (!authenticatedUserId) {
+      // Get the current user from Supabase auth as fallback
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error('fetchProjectsFromDatabase: Error getting user:', userError);
+        throw userError;
+      }
+      
+      if (!user) {
+        console.warn('fetchProjectsFromDatabase: No authenticated user found');
+        throw new Error('Authentication required to get projects');
+      }
+      
+      authenticatedUserId = user.id;
     }
     
     // Query the database for the user's projects
-    console.log(`fetchProjectsFromDatabase: Querying database for user ${user.id}`);
+    console.log(`fetchProjectsFromDatabase: Querying database for user ${authenticatedUserId}`);
+    
+    // Add a timestamp parameter to avoid caching
+    const timestamp = new Date().getTime();
+    
     const { data: projectsData, error } = await supabase
       .from('projects')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', authenticatedUserId)
       .order('updated_at', { ascending: false });
     
     if (error) {
@@ -712,60 +736,22 @@ export async function deleteProject(projectId: string): Promise<boolean> {
   try {
     console.log('deleteProject: Deleting project:', projectId);
     
-    // Delete project files first (foreign key constraint)
-    const { error: filesError } = await supabase
-      .from('project_files')
-      .delete()
-      .eq('project_id', projectId);
+    // Use the direct-delete API endpoint instead of Supabase client
+    const response = await fetch(`/api/projects/direct-delete?projectId=${projectId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     
-    if (filesError) {
-      console.error('deleteProject: Error deleting project files:', filesError);
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('deleteProject: API error:', errorData);
       return false;
     }
     
-    // Delete conversation entries
-    const { error: conversationsError } = await supabase
-      .from('conversation_entries')
-      .delete()
-      .eq('project_id', projectId);
-    
-    if (conversationsError) {
-      console.error('deleteProject: Error deleting conversation entries:', conversationsError);
-      // Continue anyway, this is not critical
-    }
-    
-    // Delete project settings
-    const { error: settingsError } = await supabase
-      .from('project_settings')
-      .delete()
-      .eq('project_id', projectId);
-    
-    if (settingsError) {
-      console.error('deleteProject: Error deleting project settings:', settingsError);
-      // Continue anyway, this is not critical
-    }
-    
-    // Delete deployment history
-    const { error: deploymentError } = await supabase
-      .from('deployment_history')
-      .delete()
-      .eq('project_id', projectId);
-    
-    if (deploymentError) {
-      console.error('deleteProject: Error deleting deployment history:', deploymentError);
-      // Continue anyway, this is not critical
-    }
-    
-    // Delete project
-    const { error: projectError } = await supabase
-      .from('projects')
-      .delete()
-      .eq('id', projectId);
-    
-    if (projectError) {
-      console.error('deleteProject: Error deleting project:', projectError);
-      return false;
-    }
+    const data = await response.json();
+    console.log('deleteProject: API response:', data);
     
     // In development mode, also clean up localStorage
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
@@ -973,7 +959,7 @@ function getMockProjects(): ProjectContext[] {
         cachedProjects = JSON.parse(cachedProjectsJson);
         console.log(`Loaded ${cachedProjects.length} projects from localStorage cache`);
       }
-  } catch (error) {
+    } catch (error) {
       console.error('Error loading cached projects:', error);
     }
   }
@@ -1119,141 +1105,151 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 // Save conversation and generated code
-export async function saveConversationAndCode(
+export const saveConversationAndCode = async (
   projectId: string,
-  messages: {
-    id: string;
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp: Date;
-  }[],
-  files: {
-    id: string;
-    name: string;
-    path: string;
-    content: string;
-    language: string;
-    type: ProjectFileType;
-    createdAt: Date;
-    updatedAt: Date;
-  }[]
-): Promise<boolean> {
+  messages: Message[],
+  files: CodeFile[]
+): Promise<boolean> => {
   try {
-    console.log('saveConversationAndCode: Saving conversation and code for project:', projectId);
+    console.log('saveConversationAndCode: Starting save process for project', projectId);
     
-    // Get the current user
-    const user = await supabase.auth.getUser();
-    if (!user.data.user) {
-      console.error('saveConversationAndCode: User not authenticated');
-      throw new Error('User not authenticated');
-    }
-    
-    // Get the project to update
-    const project = await getProject(projectId);
-    if (!project) {
-      console.error('saveConversationAndCode: Project not found:', projectId);
+    // Check for user authentication
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      console.error('saveConversationAndCode: User not authenticated', userError);
       return false;
     }
     
-    // 1. Save conversation entries
-    console.log('saveConversationAndCode: Saving conversation entries');
+    // Get project to verify ownership
+    const project = await getProject(projectId);
+    if (!project) {
+      console.error('saveConversationAndCode: Project not found', projectId);
+      return false;
+    }
+    
+    // Save conversation entries
+    console.log(`saveConversationAndCode: Saving ${messages.length} conversation entries`);
+    let conversationSaveSuccess = true;
+    
     for (const message of messages) {
-      const { error } = await supabase
-        .from('conversation_entries')
-        .upsert({
-          id: message.id,
-          project_id: projectId,
-          user_id: user.data.user.id,
-          role: message.role,
-          content: message.content,
-          timestamp: message.timestamp.toISOString(),
-          metadata: {
-            files_modified: files.map(f => f.path)
-          }
-        });
-      
-      if (error) {
-        console.error('saveConversationAndCode: Error saving conversation entry:', error);
-        // Continue anyway, we'll just have incomplete data
-      }
-    }
-    
-    // 2. Save files
-    console.log('saveConversationAndCode: Saving files');
-    for (const file of files) {
-      const { error } = await supabase
-        .from('project_files')
-        .upsert({
-          id: file.id,
-          project_id: projectId,
-          name: file.name,
-          path: file.path,
-          type: file.type,
-          content: file.content,
-          created_at: file.createdAt.toISOString(),
-          updated_at: file.updatedAt.toISOString(),
-          metadata: {
-            language: file.language
-          }
-        });
-      
-      if (error) {
-        console.error('saveConversationAndCode: Error saving file:', error);
-        // Continue anyway, we'll just have incomplete data
-      }
-    }
-    
-    // 3. Update project's updated_at timestamp
-    console.log('saveConversationAndCode: Updating project timestamp');
-    const { error } = await supabase
-      .from('projects')
-      .update({
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', projectId);
-    
-    if (error) {
-      console.error('saveConversationAndCode: Error updating project timestamp:', error);
-      // Continue anyway, this is not critical
-    }
-    
-    // 4. If in development mode, also update localStorage for backup
-    if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
       try {
-        console.log('saveConversationAndCode: Updating localStorage cache');
+        const { error } = await supabase
+          .from('conversation_entries')
+          .upsert({
+            id: message.id,
+            project_id: projectId,
+            role: message.role,
+            content: message.content,
+            created_at: message.timestamp,
+            metadata: message.metadata || {},
+          });
+          
+        if (error) {
+          console.error('saveConversationAndCode: Error saving conversation entry', error);
+          conversationSaveSuccess = false;
+          // Continue to try saving other messages
+        }
+      } catch (err) {
+        console.error('saveConversationAndCode: Exception saving conversation entry', err);
+        conversationSaveSuccess = false;
+        // Continue to try saving other messages
+      }
+    }
+    
+    if (!conversationSaveSuccess) {
+      console.warn('saveConversationAndCode: Some conversation entries failed to save');
+    }
+    
+    // Save files
+    console.log(`saveConversationAndCode: Saving ${files.length} files`);
+    let fileSaveSuccess = true;
+    
+    for (const file of files) {
+      try {
+        const { error } = await supabase
+          .from('project_files')
+          .upsert({
+            id: file.id,
+            project_id: projectId,
+            name: file.name,
+            path: file.path,
+            type: file.type,
+            content: file.content,
+            created_at: file.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            metadata: file.metadata || {},
+          });
+          
+        if (error) {
+          console.error('saveConversationAndCode: Error saving file', file.path, error);
+          fileSaveSuccess = false;
+          // Continue to try saving other files
+        }
+      } catch (err) {
+        console.error('saveConversationAndCode: Exception saving file', file.path, err);
+        fileSaveSuccess = false;
+        // Continue to try saving other files
+      }
+    }
+    
+    if (!fileSaveSuccess) {
+      console.warn('saveConversationAndCode: Some files failed to save');
+    }
+    
+    // Update project timestamp
+    try {
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', projectId);
+        
+      if (updateError) {
+        console.error('saveConversationAndCode: Error updating project timestamp', updateError);
+      }
+    } catch (err) {
+      console.error('saveConversationAndCode: Exception updating project timestamp', err);
+    }
+    
+    // Update local storage cache if in development mode
+    if (process.env.NODE_ENV === 'development') {
+      try {
         // Get existing projects from localStorage
-        let cachedProjects: ProjectContext[] = [];
-        const cachedProjectsJson = localStorage.getItem('mockProjects');
-        if (cachedProjectsJson) {
-          cachedProjects = JSON.parse(cachedProjectsJson);
+        const existingProjectsJson = localStorage.getItem('projects');
+        let cachedProjects: any[] = [];
+        
+        if (existingProjectsJson) {
+          try {
+            cachedProjects = JSON.parse(existingProjectsJson);
+          } catch (err) {
+            console.error('saveConversationAndCode: Error parsing cached projects', err);
+            // Continue with empty array
+          }
         }
         
-        // Find and update the project
-        const projectIndex = cachedProjects.findIndex(p => p.id === projectId);
-        if (projectIndex >= 0) {
-          // Update conversation history
-          cachedProjects[projectIndex].conversation_history = messages.map(msg => ({
-            id: msg.id,
-            timestamp: msg.timestamp.toISOString(),
-            role: msg.role as 'user' | 'assistant' | 'system',
-            content: msg.content,
-            metadata: {
-              tokens_used: 0,
-              files_modified: files.map(f => f.path)
-            }
+        // Find the project in the cached projects
+        const projectIndex = cachedProjects.findIndex((p) => p.id === projectId);
+        
+        if (projectIndex !== -1) {
+          // Update the project's conversation history
+          cachedProjects[projectIndex].conversation_history = messages.map((message) => ({
+            id: message.id,
+            timestamp: message.timestamp,
+            role: message.role,
+            content: message.content,
+            tokens_used: message.metadata?.tokens_used || 0,
+            files_modified: message.metadata?.files_modified || [],
           }));
           
-          // Update files
+          // Update the project's files
           for (const file of files) {
-            const existingFileIndex = cachedProjects[projectIndex].files.findIndex(f => f.path === file.path);
+            const existingFileIndex = cachedProjects[projectIndex].files.findIndex(
+              (f: any) => f.path === file.path
+            );
             
-            if (existingFileIndex >= 0) {
+            if (existingFileIndex !== -1) {
               // Update existing file
-              cachedProjects[projectIndex].files[existingFileIndex] = {
-                ...cachedProjects[projectIndex].files[existingFileIndex],
-                content: file.content,
-                updated_at: file.updatedAt.toISOString()
-              };
+              cachedProjects[projectIndex].files[existingFileIndex].content = file.content;
+              cachedProjects[projectIndex].files[existingFileIndex].updated_at = new Date().toISOString();
             } else {
               // Add new file
               cachedProjects[projectIndex].files.push({
@@ -1262,34 +1258,33 @@ export async function saveConversationAndCode(
                 path: file.path,
                 type: file.type,
                 content: file.content,
-                created_at: file.createdAt.toISOString(),
-                updated_at: file.updatedAt.toISOString(),
-                metadata: {
-                  language: file.language
-                }
+                created_at: file.created_at || new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                metadata: file.metadata || {},
               });
             }
           }
           
-          // Update timestamp
+          // Update the project's updated_at timestamp
           cachedProjects[projectIndex].updated_at = new Date().toISOString();
           
-          // Save back to localStorage
-          localStorage.setItem('mockProjects', JSON.stringify(cachedProjects));
-          console.log('saveConversationAndCode: Updated localStorage cache');
+          // Save the updated projects back to localStorage
+          localStorage.setItem('projects', JSON.stringify(cachedProjects));
+          console.log('saveConversationAndCode: Updated local storage cache');
         }
-      } catch (error) {
-        console.error('saveConversationAndCode: Error updating localStorage:', error);
+      } catch (err) {
+        console.error('saveConversationAndCode: Error updating localStorage cache', err);
+        // Continue execution - localStorage failure shouldn't prevent success
       }
     }
     
     console.log('saveConversationAndCode: Successfully saved conversation and code');
     return true;
-  } catch (error) {
-    console.error('saveConversationAndCode: Error in saveConversationAndCode:', error);
+  } catch (err) {
+    console.error('saveConversationAndCode: Unexpected error during save process', err);
     return false;
   }
-}
+};
 
 // Update project details (name and description)
 export async function updateProjectDetails(

@@ -2,6 +2,7 @@ import { AppProps } from 'next/app';
 import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import dynamic from 'next/dynamic';
+import { Toaster } from 'react-hot-toast';
 import { ProjectRefreshProvider } from '../contexts/ProjectRefreshContext';
 import '../styles/globals.css';
 
@@ -39,6 +40,30 @@ function MyApp({ Component, pageProps }: AppProps) {
       <ThemeProvider attribute="class" defaultTheme="dark">
         <ProjectRefreshProvider>
           <AppContent Component={Component} pageProps={pageProps} />
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: '#333',
+                color: '#fff',
+              },
+              success: {
+                duration: 3000,
+                iconTheme: {
+                  primary: '#10B981',
+                  secondary: '#FFFFFF',
+                },
+              },
+              error: {
+                duration: 4000,
+                iconTheme: {
+                  primary: '#EF4444',
+                  secondary: '#FFFFFF',
+                },
+              },
+            }}
+          />
         </ProjectRefreshProvider>
       </ThemeProvider>
     </SessionProvider>

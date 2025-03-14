@@ -2,120 +2,120 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { createClient } from '@supabase/supabase-js';
+import { v4 as uuidv4 } from 'uuid';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Check authentication
   const session = await getServerSession(req, res, authOptions);
-
-  if (!session || !session.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
+  if (!session) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  switch (req.method) {
-    case 'GET':
-      return handleGet(req, res, session);
-    case 'POST':
-      return handlePost(req, res, session);
-    default:
-      return res.status(405).json({ message: 'Method not allowed' });
-  }
-}
+  const userId = session.user.id;
 
-// Get conversations for a project
-async function handleGet(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  session: any
-) {
-  try {
+  // Handle GET request - List conversations for a project
+  if (req.method === 'GET') {
     const { projectId } = req.query;
 
     if (!projectId) {
-      return res.status(400).json({ message: 'Project ID is required' });
+      return res.status(400).json({ error: 'Project ID is required' });
     }
 
-    // Verify user owns the project
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('user_id', session.user.id)
-      .single();
+    try {
+      // Verify project ownership
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .single();
 
-    if (projectError || !project) {
-      return res.status(404).json({ message: 'Project not found' });
+      if (projectError || !project) {
+        console.error('Error verifying project ownership:', projectError);
+        return res.status(403).json({ error: 'Not authorized to access this project' });
+      }
+
+      // Get conversations for the project
+      const { data: conversations, error } = await supabase
+        .from('conversations')
+        .select('id, title, created_at, updated_at')
+        .eq('project_id', projectId)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching conversations:', error);
+        return res.status(500).json({ error: 'Failed to fetch conversations' });
+      }
+
+      return res.status(200).json(conversations || []);
+    } catch (error) {
+      console.error('Error in conversations API:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Get conversations
-    const { data: conversations, error } = await supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching conversations:', error);
-      return res.status(500).json({ message: error.message });
-    }
-
-    return res.status(200).json(conversations);
-  } catch (error: any) {
-    console.error('Error in conversations GET:', error);
-    return res.status(500).json({ message: error.message });
   }
-}
 
-// Create a new conversation
-async function handlePost(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  session: any
-) {
-  try {
-    const { projectId, title, messages, metadata } = req.body;
+  // Handle POST request - Create a new conversation
+  if (req.method === 'POST') {
+    const { projectId, title } = req.body;
 
-    if (!projectId || !title) {
-      return res.status(400).json({ message: 'Project ID and title are required' });
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
     }
 
-    // Verify user owns the project
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('user_id', session.user.id)
-      .single();
+    try {
+      // Verify project ownership
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .single();
 
-    if (projectError || !project) {
-      return res.status(404).json({ message: 'Project not found' });
-    }
+      if (projectError || !project) {
+        console.error('Error verifying project ownership:', projectError);
+        return res.status(403).json({ error: 'Not authorized to access this project' });
+      }
 
-    // Create conversation
-    const { data: conversation, error } = await supabaseAdmin
-      .from('conversations')
-      .insert({
+      // Create a new conversation
+      const conversationId = uuidv4();
+      const { error } = await supabase
+        .from('conversations')
+        .insert({
+          id: conversationId,
+          project_id: projectId,
+          title: title || 'New Conversation',
+          user_id: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error('Error creating conversation:', error);
+        return res.status(500).json({ error: 'Failed to create conversation' });
+      }
+
+      return res.status(201).json({ 
+        id: conversationId,
         project_id: projectId,
-        title,
-        messages: messages || [],
-        metadata: metadata || {}
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating conversation:', error);
-      return res.status(500).json({ message: error.message });
+        title: title || 'New Conversation',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error in conversations API:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-
-    return res.status(201).json(conversation);
-  } catch (error: any) {
-    console.error('Error in conversations POST:', error);
-    return res.status(500).json({ message: error.message });
   }
+
+  // Handle unsupported methods
+  return res.status(405).json({ error: 'Method not allowed' });
 } 

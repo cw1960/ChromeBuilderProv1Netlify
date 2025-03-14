@@ -7,8 +7,12 @@ import { ArrowLeft, Save, Download, Edit, LogOut } from 'lucide-react';
 import ConversationInterface from '@/components/conversation/ConversationInterface';
 import ProjectEditModal from '@/components/conversation/ProjectEditModal';
 import ConversationSidebar from '@/components/conversation/ConversationSidebar';
-import { saveConversationAndCode, getProject, createNewProject, updateProjectDetails, ProjectContext } from '@/lib/supabase-mcp';
+import { saveConversationAndCode, getProject, createNewProject, updateProjectDetails } from '@/lib/supabase-mcp';
+import { ProjectContext } from '@/types/project';
 import DashboardHeader from '@/components/layout/DashboardHeader';
+import toast from 'react-hot-toast';
+import { Message } from '@/types/message';
+import { CodeFile } from '@/types/code';
 
 export default function ConversationPage() {
   const { data: session, status } = useSession();
@@ -125,64 +129,141 @@ export default function ConversationPage() {
   };
   
   // Handle saving conversation and code
-  const handleSaveConversation = async (messages: any[], files: any[]) => {
-    if (!project) {
-      console.log('Conversation: No project exists, creating one');
-      // If no project exists, create one first
-      const projectName = 'Chrome Extension';
-      const projectDesc = 'Created from conversation with AI assistant';
+  const handleSaveConversation = async (messages: Message[], files: CodeFile[]) => {
+    setIsSaving(true);
+    setError(null);
+    
+    try {
+      console.log('Conversation: Saving conversation and code');
       
-      try {
-        setIsSaving(true);
+      // If we don't have a project yet, create one
+      if (!project) {
+        console.log('Conversation: Creating new project for conversation');
+        
         const newProject = await createNewProject(
-          projectName,
-          projectDesc
+          'Chrome Extension',
+          'Created from conversation with AI assistant',
         );
         
-        if (newProject) {
-          console.log('Conversation: New project created for conversation:', newProject.name);
-          setProject(newProject);
-          // Update URL with new project ID without reloading the page
-          router.push(`/dashboard/conversation?projectId=${newProject.id}`, undefined, { shallow: true });
-          
-          // Now save the conversation and code to the new project
-          console.log('Conversation: Saving conversation and code to new project');
-          const result = await saveConversationAndCode(newProject.id, messages, files);
-          setIsSaving(false);
-          return result;
-        } else {
-          console.error('Conversation: Failed to create project for conversation');
-          setIsSaving(false);
-          return false;
+        if (!newProject) {
+          throw new Error('Failed to create project');
         }
-      } catch (err) {
-        console.error('Conversation: Error creating project for conversation:', err);
-        setIsSaving(false);
-        return false;
-      }
-    }
-    
-    // Save to existing project
-    console.log('Conversation: Saving conversation and code to existing project:', project.id);
-    setIsSaving(true);
-    const result = await saveConversationAndCode(project.id, messages, files);
-    setIsSaving(false);
-    
-    // Reload the project to get the latest data
-    if (result) {
-      try {
-        console.log('Conversation: Reloading project after save');
-        const updatedProject = await getProject(project.id);
-        if (updatedProject) {
-          console.log('Conversation: Project reloaded successfully');
-          setProject(updatedProject);
+        
+        console.log('Conversation: New project created:', newProject.id);
+        
+        // If we don't have a conversation ID yet, create one
+        let currentConversationId = conversationId as string | undefined;
+        
+        if (!currentConversationId) {
+          try {
+            console.log('Conversation: Creating new conversation');
+            const response = await fetch('/api/conversations', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                projectId: newProject.id,
+                title: 'New Conversation',
+              }),
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to create conversation');
+            }
+            
+            const data = await response.json();
+            currentConversationId = data.id;
+            console.log('Conversation: New conversation created:', currentConversationId);
+            
+            // Update URL with new project ID and conversation ID without reloading
+            const url = new URL(window.location.href);
+            url.searchParams.set('projectId', newProject.id);
+            url.searchParams.set('conversationId', String(currentConversationId));
+            window.history.pushState({}, '', url.toString());
+          } catch (err) {
+            console.error('Conversation: Error creating conversation:', err);
+            // Continue with save even if conversation creation fails
+          }
         }
-      } catch (err) {
-        console.error('Conversation: Error reloading project after save:', err);
+        
+        // Save conversation to the new project
+        const saveResult = await saveConversationAndCode(
+          newProject.id,
+          messages,
+          files
+        );
+        
+        if (!saveResult) {
+          throw new Error('Failed to save conversation to new project');
+        }
+        
+        console.log('Conversation: Saved to new project successfully');
+        toast.success('Your conversation has been saved to a new project.');
+        
+        return true;
+      } else {
+        // If we don't have a conversation ID yet, create one
+        let currentConversationId = conversationId as string | undefined;
+        
+        if (!currentConversationId) {
+          try {
+            console.log('Conversation: Creating new conversation for existing project');
+            const response = await fetch('/api/conversations', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                projectId: project.id,
+                title: 'New Conversation',
+              }),
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to create conversation');
+            }
+            
+            const data = await response.json();
+            currentConversationId = data.id;
+            console.log('Conversation: New conversation created:', currentConversationId);
+            
+            // Update URL with conversation ID without reloading
+            const url = new URL(window.location.href);
+            url.searchParams.set('conversationId', String(currentConversationId));
+            window.history.pushState({}, '', url.toString());
+          } catch (err) {
+            console.error('Conversation: Error creating conversation:', err);
+            // Continue with save even if conversation creation fails
+          }
+        }
+        
+        // Save to existing project
+        console.log('Conversation: Saving to existing project:', project.id);
+        
+        const saveResult = await saveConversationAndCode(
+          project.id,
+          messages,
+          files
+        );
+        
+        if (!saveResult) {
+          throw new Error('Failed to save conversation to existing project');
+        }
+        
+        console.log('Conversation: Saved to existing project successfully');
+        toast.success('Your conversation and code have been saved.');
+        
+        return true;
       }
+    } catch (err) {
+      console.error('Conversation: Error saving conversation:', err);
+      setError('Failed to save conversation and code. Please try again.');
+      toast.error('There was an error saving your conversation. Your work is still here, but you may want to try again later.');
+      return false;
+    } finally {
+      setIsSaving(false);
     }
-    
-    return result;
   };
   
   const handleUpdateProject = async (projectId: string, name: string, description: string): Promise<void> => {

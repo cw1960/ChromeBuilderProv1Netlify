@@ -3,168 +3,156 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Check authentication
   const session = await getServerSession(req, res, authOptions);
-
-  if (!session || !session.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
+  if (!session) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  switch (req.method) {
-    case 'GET':
-      return handleGet(req, res, session);
-    case 'PUT':
-      return handlePut(req, res, session);
-    case 'DELETE':
-      return handleDelete(req, res, session);
-    default:
-      return res.status(405).json({ message: 'Method not allowed' });
+  const userId = session.user.id;
+  const { id } = req.query;
+
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({ error: 'Conversation ID is required' });
   }
-}
 
-// Get a single conversation
-async function handleGet(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  session: any
-) {
-  try {
-    const { id } = req.query;
+  // Handle GET request - Get a specific conversation
+  if (req.method === 'GET') {
+    try {
+      // Get the conversation and verify ownership
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
 
-    // Get conversation and verify ownership through project
-    const { data: conversation, error } = await supabaseAdmin
-      .from('conversations')
-      .select(`
-        *,
-        projects:project_id (
-          user_id
-        )
-      `)
-      .eq('id', id)
-      .single();
+      if (error) {
+        console.error('Error fetching conversation:', error);
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
 
-    if (error || !conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      // Get conversation entries
+      const { data: entries, error: entriesError } = await supabase
+        .from('conversation_entries')
+        .select('*')
+        .eq('conversation_id', id)
+        .order('created_at', { ascending: true });
+
+      if (entriesError) {
+        console.error('Error fetching conversation entries:', entriesError);
+        return res.status(500).json({ error: 'Failed to fetch conversation entries' });
+      }
+
+      return res.status(200).json({
+        ...conversation,
+        entries: entries || []
+      });
+    } catch (error) {
+      console.error('Error in conversation GET:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Verify user owns the project
-    if (conversation.projects.user_id !== session.user.id) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    return res.status(200).json(conversation);
-  } catch (error: any) {
-    console.error('Error in conversation GET:', error);
-    return res.status(500).json({ message: error.message });
   }
-}
 
-// Update a conversation
-async function handlePut(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  session: any
-) {
-  try {
-    const { id } = req.query;
-    const { title, messages, metadata } = req.body;
+  // Handle PATCH request - Update a conversation
+  if (req.method === 'PATCH') {
+    const { title } = req.body;
 
-    // Get conversation and verify ownership through project
-    const { data: existing, error: fetchError } = await supabaseAdmin
-      .from('conversations')
-      .select(`
-        *,
-        projects:project_id (
-          user_id
-        )
-      `)
-      .eq('id', id)
-      .single();
+    try {
+      // Verify conversation ownership
+      const { data: conversation, error: verifyError } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
 
-    if (fetchError || !existing) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      if (verifyError || !conversation) {
+        console.error('Error verifying conversation ownership:', verifyError);
+        return res.status(403).json({ error: 'Not authorized to update this conversation' });
+      }
+
+      // Update the conversation
+      const updates: any = {
+        updated_at: new Date().toISOString()
+      };
+
+      if (title !== undefined) {
+        updates.title = title;
+      }
+
+      const { error } = await supabase
+        .from('conversations')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating conversation:', error);
+        return res.status(500).json({ error: 'Failed to update conversation' });
+      }
+
+      return res.status(200).json({ id, ...updates });
+    } catch (error) {
+      console.error('Error in conversation PATCH:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Verify user owns the project
-    if (existing.projects.user_id !== session.user.id) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    // Update conversation
-    const { data: conversation, error } = await supabaseAdmin
-      .from('conversations')
-      .update({
-        title: title || existing.title,
-        messages: messages || existing.messages,
-        metadata: metadata || existing.metadata
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating conversation:', error);
-      return res.status(500).json({ message: error.message });
-    }
-
-    return res.status(200).json(conversation);
-  } catch (error: any) {
-    console.error('Error in conversation PUT:', error);
-    return res.status(500).json({ message: error.message });
   }
-}
 
-// Delete a conversation
-async function handleDelete(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  session: any
-) {
-  try {
-    const { id } = req.query;
+  // Handle DELETE request - Delete a conversation
+  if (req.method === 'DELETE') {
+    try {
+      // Verify conversation ownership
+      const { data: conversation, error: verifyError } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
 
-    // Get conversation and verify ownership through project
-    const { data: existing, error: fetchError } = await supabaseAdmin
-      .from('conversations')
-      .select(`
-        *,
-        projects:project_id (
-          user_id
-        )
-      `)
-      .eq('id', id)
-      .single();
+      if (verifyError || !conversation) {
+        console.error('Error verifying conversation ownership:', verifyError);
+        return res.status(403).json({ error: 'Not authorized to delete this conversation' });
+      }
 
-    if (fetchError || !existing) {
-      return res.status(404).json({ message: 'Conversation not found' });
+      // Delete conversation entries first
+      const { error: entriesError } = await supabase
+        .from('conversation_entries')
+        .delete()
+        .eq('conversation_id', id);
+
+      if (entriesError) {
+        console.error('Error deleting conversation entries:', entriesError);
+        return res.status(500).json({ error: 'Failed to delete conversation entries' });
+      }
+
+      // Delete the conversation
+      const { error } = await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting conversation:', error);
+        return res.status(500).json({ error: 'Failed to delete conversation' });
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error in conversation DELETE:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Verify user owns the project
-    if (existing.projects.user_id !== session.user.id) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    // Delete conversation
-    const { error } = await supabaseAdmin
-      .from('conversations')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error deleting conversation:', error);
-      return res.status(500).json({ message: error.message });
-    }
-
-    return res.status(204).end();
-  } catch (error: any) {
-    console.error('Error in conversation DELETE:', error);
-    return res.status(500).json({ message: error.message });
   }
+
+  // Handle unsupported methods
+  return res.status(405).json({ error: 'Method not allowed' });
 } 

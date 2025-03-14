@@ -130,6 +130,9 @@ export const authOptions: NextAuthOptions = {
     
     // Add user details to JWT token
     async jwt({ token, user, account, trigger }) {
+      console.log('JWT callback - token:', token);
+      console.log('JWT callback - user:', user);
+      
       // Initial sign in
       if (account && user) {
         // If signing in with OAuth and not test user, link account with Supabase

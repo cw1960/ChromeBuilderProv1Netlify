@@ -49,6 +49,8 @@ const ConversationInterface: React.FC<ConversationInterfaceProps> = ({
   const [generatedFiles, setGeneratedFiles] = useState<CodeFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<CodeFile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
   
@@ -161,6 +163,89 @@ const ConversationInterface: React.FC<ConversationInterfaceProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Add a new useEffect for auto-saving with improved error handling
+  useEffect(() => {
+    // Only attempt to auto-save if:
+    // 1. We have a project ID
+    // 2. We have at least 2 messages (initial + at least one exchange)
+    // 3. We're not currently loading a response
+    // 4. We're not already manually saving
+    // 5. We have the save callback
+    if (projectId && messages.length >= 2 && !isLoading && !isSaving && onSaveConversation) {
+      const autoSave = async () => {
+        // Update auto-save status
+        setAutoSaveStatus('saving');
+        
+        try {
+          console.log('ConversationInterface: Auto-saving conversation and code');
+          
+          // If we have a conversation ID, try to generate a title for it
+          if (conversationId && messages.length >= 2) {
+            try {
+              const firstUserMessage = messages.find(m => m.role === 'user');
+              if (firstUserMessage) {
+                console.log('ConversationInterface: Generating title for conversation', conversationId);
+                
+                // Call the generate-title API
+                const titleResponse = await fetch('/api/conversations/generate-title', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    conversationId,
+                    messages,
+                  }),
+                });
+                
+                if (titleResponse.ok) {
+                  const { title } = await titleResponse.json();
+                  console.log('ConversationInterface: Generated title:', title);
+                } else {
+                  console.error('ConversationInterface: Failed to generate title');
+                }
+              }
+            } catch (titleErr) {
+              console.error('ConversationInterface: Error generating title:', titleErr);
+              // Continue with save even if title generation fails
+            }
+          }
+          
+          const saveResult = await onSaveConversation(messages, generatedFiles);
+          
+          if (!saveResult) {
+            console.error('ConversationInterface: Auto-save failed');
+            setAutoSaveStatus('error');
+            // Don't show error to user for auto-save to avoid disruption
+          } else {
+            console.log('ConversationInterface: Auto-save successful');
+            setAutoSaveStatus('success');
+            setLastSaved(new Date());
+            
+            // Reset status after a delay
+            setTimeout(() => {
+              setAutoSaveStatus('idle');
+            }, 3000);
+          }
+        } catch (err) {
+          console.error('ConversationInterface: Error during auto-save:', err);
+          setAutoSaveStatus('error');
+          
+          // Try again after a longer delay if there was an error
+          setTimeout(() => {
+            setAutoSaveStatus('idle');
+          }, 5000);
+        }
+      };
+      
+      // Add a delay to avoid saving during rapid interactions
+      // Use a longer delay for auto-save to reduce frequency
+      const saveTimeout = setTimeout(autoSave, 5000);
+      
+      return () => clearTimeout(saveTimeout);
+    }
+  }, [projectId, conversationId, messages, generatedFiles, isLoading, isSaving, onSaveConversation]);
 
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -428,6 +513,7 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
     if (!onSaveConversation || messages.length <= 1) return;
     
     setIsSaving(true);
+    setError(null);
     
     try {
       // Generate a title for the conversation if we have enough messages
@@ -465,41 +551,55 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
       // If we have a specific conversation ID, update that conversation
       if (conversationId) {
         console.log('ConversationInterface: Updating existing conversation:', conversationId);
-        const response = await fetch(`/api/conversations/${conversationId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: messages.map(msg => ({
-              id: msg.id,
-              role: msg.role,
-              content: msg.content,
-              timestamp: msg.timestamp.toISOString()
-            })),
-            // Only update the title if we generated one
-            ...(title && { title })
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to update conversation');
+        try {
+          const response = await fetch(`/api/conversations/${conversationId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messages: messages.map(msg => ({
+                id: msg.id,
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp.toISOString()
+              })),
+              // Only update the title if we generated one
+              ...(title && { title })
+            }),
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.text();
+            console.error('ConversationInterface: Error updating conversation:', errorData);
+            throw new Error(`Failed to update conversation: ${errorData}`);
+          }
+          
+          console.log('ConversationInterface: Conversation updated successfully');
+        } catch (err) {
+          console.error('ConversationInterface: Error updating conversation:', err);
+          // Continue with saving project data even if conversation update fails
         }
-        
-        console.log('ConversationInterface: Conversation updated successfully');
       }
       
       // Always save to the project as well (for files and other data)
+      console.log('ConversationInterface: Saving to project');
       const success = await onSaveConversation(messages, generatedFiles);
       
       if (success) {
-        alert('Conversation and code saved successfully!');
+        console.log('ConversationInterface: Project save successful');
+        // Only show alert for manual saves, not auto-saves
+        if (isSaving) {
+          alert('Conversation and code saved successfully!');
+        }
       } else {
-        alert('Failed to save conversation and code.');
+        console.error('ConversationInterface: Project save failed');
+        throw new Error('Failed to save conversation and code to project');
       }
     } catch (error) {
       console.error('Error saving conversation:', error);
-      alert('An error occurred while saving the conversation.');
+      setError(error instanceof Error ? error.message : 'An error occurred while saving');
+      alert(`Error saving: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -642,6 +742,19 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
             <h2 className="text-lg font-medium">Generated Code</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {generatedFiles.length} file{generatedFiles.length !== 1 ? 's' : ''} generated
+              {lastSaved && (
+                <span className="ml-2">
+                  {autoSaveStatus === 'saving' ? (
+                    <span className="text-yellow-500">• Auto-saving...</span>
+                  ) : autoSaveStatus === 'success' ? (
+                    <span className="text-green-500">• Auto-saved at {lastSaved.toLocaleTimeString()}</span>
+                  ) : autoSaveStatus === 'error' ? (
+                    <span className="text-red-500">• Auto-save failed</span>
+                  ) : (
+                    <span className="text-gray-400">• Last saved at {lastSaved.toLocaleTimeString()}</span>
+                  )}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex space-x-2">
@@ -652,7 +765,7 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
               disabled={isSaving || messages.length <= 1}
             >
               <Save className="w-4 h-4 mr-2" />
-              Save
+              {isSaving ? 'Saving...' : 'Save'}
             </Button>
             <Button 
               variant="outline" 
