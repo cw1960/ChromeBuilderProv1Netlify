@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { Plus, Settings, Folder, Code, Package, X, Play, BookOpen, Trash2, Edit } from 'lucide-react';
+import { Plus, Settings, Folder, Code, Package, X, Play, BookOpen, Trash2, Edit, LogOut } from 'lucide-react';
 import ProjectCreationModal from '@/components/conversation/ProjectCreationModal';
 import ProjectSelectionModal from '@/components/conversation/ProjectSelectionModal';
 import ProjectEditModal from '@/components/conversation/ProjectEditModal';
@@ -10,6 +10,7 @@ import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
 import { Button } from '@/components/ui';
 import { createNewProject, getUserProjects, deleteProject, updateProjectDetails, ProjectContext } from '@/lib/supabase-mcp';
 import { supabase } from '@/lib/supabase';
+import DashboardHeader from '@/components/layout/DashboardHeader';
 
 // Define Project type for use in this component
 type Project = {
@@ -41,6 +42,10 @@ export default function Dashboard() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [projectDescription, setProjectDescription] = useState('');
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -103,26 +108,54 @@ export default function Dashboard() {
   const handleCreateProject = async (name: string, description: string): Promise<void> => {
     console.log('Dashboard: handleCreateProject called with:', { name, description });
     try {
-      console.log('Dashboard: Calling createNewProject');
-      const newProject = await createNewProject(name, description);
-      console.log('Dashboard: createNewProject returned:', newProject);
+      console.log('Dashboard: Creating new project');
+      setIsCreatingProject(true);
+      
+      if (!name.trim()) {
+        throw new Error('Project name is required');
+      }
+      
+      const newProject = await createNewProject(
+        name,
+        description
+      );
       
       if (newProject) {
-        console.log('Dashboard: New project created successfully, loading projects');
-        // Load all projects to ensure the list is up to date
-        await loadProjects();
-        
-        console.log('Dashboard: Setting selected project to:', newProject.id);
-        // Set the newly created project as the selected project
-        setSelectedProject(newProject.id);
-        
+        console.log('Dashboard: Project created successfully:', newProject.id);
         console.log('Dashboard: Closing project modal');
         // Close the project modal
         setShowProjectModal(false);
         
-        // Navigate to the conversation page with the new project
-        console.log('Dashboard: Navigating to conversation page');
-        router.push(`/dashboard/conversation?projectId=${newProject.id}`);
+        // Add a longer delay before navigation to ensure database operations complete
+        console.log('Dashboard: Adding delay before navigation');
+        
+        // Verify the project exists in the database before navigating
+        const verifyProject = async () => {
+          try {
+            console.log('Dashboard: Verifying project exists in database');
+            const response = await fetch(`/api/projects/get-project/?projectId=${newProject.id}`);
+            
+            if (response.ok) {
+              const data = await response.json();
+              console.log('Dashboard: Project verified:', data.project.name);
+              
+              // Navigate to the conversation page with the new project
+              console.log('Dashboard: Navigating to conversation page');
+              router.push(`/dashboard/conversation?projectId=${newProject.id}`);
+            } else {
+              console.error('Dashboard: Project verification failed, retrying in 2 seconds');
+              // If verification fails, try again after a delay
+              setTimeout(verifyProject, 2000);
+            }
+          } catch (error) {
+            console.error('Dashboard: Error verifying project:', error);
+            // If verification fails, try again after a delay
+            setTimeout(verifyProject, 2000);
+          }
+        };
+        
+        // Start verification after a short delay
+        setTimeout(verifyProject, 1000);
       } else {
         console.error('Dashboard: createNewProject returned null');
         throw new Error('Failed to create project: The server returned an empty response. Please try again later.');
@@ -132,6 +165,8 @@ export default function Dashboard() {
       
       // Rethrow the error to be handled by the ProjectCreationModal
       throw error;
+    } finally {
+      setIsCreatingProject(false);
     }
   };
 
@@ -345,14 +380,10 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-auto bg-gray-50 dark:bg-gray-900">
         {/* Dashboard Header */}
-        <header className="bg-white dark:bg-gray-800 shadow">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Welcome to Chrome Builder. Create and manage your Chrome extensions.
-            </p>
-          </div>
-        </header>
+        <DashboardHeader 
+          title="Dashboard" 
+          description="Welcome to Chrome Builder. Create and manage your Chrome extensions."
+        />
         
         {/* Dashboard Content */}
         <main className="flex-1 py-6">

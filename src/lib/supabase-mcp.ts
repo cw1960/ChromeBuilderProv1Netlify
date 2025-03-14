@@ -168,73 +168,137 @@ export async function getProject(projectId: string): Promise<ProjectContext | nu
   }
   
   try {
-    // Get the current user
+    // First try to get the project using the authenticated client
     const { data: { user } } = await supabase.auth.getUser();
+    let project = null;
+    let error = null;
     
-    if (!user) {
-      console.warn('getProject: No authenticated user found');
+    if (user) {
+      console.log(`getProject: Authenticated user found, querying database for project ${projectId}`);
+      const result = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
       
-      if (isDev) {
-        console.log('getProject: Development mode - returning null');
+      project = result.data;
+      error = result.error;
+      
+      if (error) {
+        console.error('getProject: Error with authenticated query:', error);
+      }
+    } else {
+      console.warn('getProject: No authenticated user found, will try admin client');
+    }
+    
+    // If no project found or error occurred, try using the admin client
+    if (!project || error) {
+      console.log(`getProject: Trying admin client for project ${projectId}`);
+      
+      // Initialize Supabase admin client with service role key
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      
+      if (!supabaseUrl || !supabaseServiceKey) {
+        console.error('getProject: Missing Supabase configuration for admin client');
         return null;
       }
       
-      throw new Error('Authentication required to get project');
-    }
-    
-    // Query the database for the project
-    console.log(`getProject: Querying database for project ${projectId}`);
-    const { data: project, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .single();
-    
-    if (error) {
-      console.error('getProject: Database error:', error);
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      });
       
-      if (isDev) {
-        console.log('getProject: Development mode - returning null despite error');
+      // Query the database for the project using admin client
+      const adminResult = await supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+      
+      if (adminResult.error) {
+        console.error('getProject: Admin client database error:', adminResult.error);
         return null;
       }
       
-      throw error;
-    }
-    
-    if (!project) {
-      console.log('getProject: Project not found in database');
-      return null;
+      project = adminResult.data;
+      
+      if (!project) {
+        console.log('getProject: Project not found with admin client');
+        return null;
+      }
     }
     
     console.log('getProject: Found project in database:', project.name);
     
-    // Get project files
-    const { data: files, error: filesError } = await supabase
-      .from('project_files')
+    // Get project files using the same client that successfully retrieved the project
+    const supabaseClient = user ? supabase : createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    
+    const { data: files, error: filesError } = await supabaseClient
+      .from('extension_files')
       .select('*')
-      .eq('project_id', projectId);
+      .eq('project_id', project.id);
     
     if (filesError) {
       console.error('getProject: Error fetching files:', filesError);
-      
-      if (isDev) {
-        console.log('getProject: Development mode - returning project without files');
-        return {
-          ...project,
-          files: []
-        };
-      }
-      
-      throw filesError;
     }
     
-    // Return the project with files
-    const projectWithFiles = {
+    // Get project settings
+    const { data: settingsData, error: settingsError } = await supabaseClient
+      .from('project_settings')
+      .select('*')
+      .eq('project_id', project.id);
+    
+    if (settingsError) {
+      console.error('getProject: Error fetching settings:', settingsError);
+    }
+    
+    // Process settings into a more usable format
+    const settings = project.settings || {};
+    if (settingsData && settingsData.length > 0) {
+      settingsData.forEach((setting) => {
+        settings[setting.key] = setting.value;
+      });
+    }
+    
+    // Get deployment history
+    const { data: deploymentHistory, error: deploymentError } = await supabaseClient
+      .from('deployment_history')
+      .select('*')
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: false });
+    
+    if (deploymentError) {
+      console.error('getProject: Error fetching deployment history:', deploymentError);
+    }
+    
+    // Get conversations
+    const { data: conversations, error: conversationsError } = await supabaseClient
+      .from('conversations')
+      .select('*')
+      .eq('project_id', project.id)
+      .order('updated_at', { ascending: false });
+    
+    if (conversationsError) {
+      console.error('getProject: Error fetching conversations:', conversationsError);
+    }
+    
+    // Return the project with all related data
+    const projectWithData = {
       ...project,
-      files: files || []
+      files: files || [],
+      settings: settings,
+      deployment_history: deploymentHistory || [],
+      conversation_history: conversations || []
     };
     
-    console.log('getProject: Successfully fetched project with files');
+    console.log('getProject: Successfully fetched project with all related data');
     
     // In development mode, update localStorage for future use
     if (isDev && typeof window !== 'undefined') {
@@ -248,22 +312,20 @@ export async function getProject(projectId: string): Promise<ProjectContext | nu
           const index = cachedProjects.findIndex((p: { id: string }) => p.id === projectId);
           
           if (index >= 0) {
-            cachedProjects[index] = projectWithFiles;
+            cachedProjects[index] = projectWithData;
           } else {
-            cachedProjects.push(projectWithFiles);
+            cachedProjects.push(projectWithData);
           }
-        } else {
-          cachedProjects = [projectWithFiles];
+          
+          localStorage.setItem('mockProjects', JSON.stringify(cachedProjects));
+          console.log('getProject: Updated project in localStorage');
         }
-        
-        localStorage.setItem('mockProjects', JSON.stringify(cachedProjects));
-        console.log('getProject: Updated localStorage with project');
       } catch (localStorageError) {
         console.error('getProject: Error updating localStorage:', localStorageError);
       }
     }
     
-    return projectWithFiles;
+    return projectWithData;
   } catch (error) {
     console.error('getProject: Error:', error);
     
@@ -285,15 +347,37 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
   console.log('getUserProjects: Environment:', isDev ? 'development' : 'production');
   
   // In development mode, try to get projects from localStorage first
+  let localProjects: ProjectContext[] = [];
   if (isDev && typeof window !== 'undefined') {
     try {
       console.log('getUserProjects: Development mode - checking localStorage');
       const cachedProjectsJson = localStorage.getItem('mockProjects');
       
       if (cachedProjectsJson) {
-        const cachedProjects = JSON.parse(cachedProjectsJson);
-        console.log(`getUserProjects: Found ${cachedProjects.length} projects in localStorage`);
-        return cachedProjects;
+        localProjects = JSON.parse(cachedProjectsJson);
+        console.log(`getUserProjects: Found ${localProjects.length} projects in localStorage`);
+        
+        // If we're in development mode and have local projects, return them immediately
+        // We'll still try to fetch from the database in the background
+        if (localProjects.length > 0) {
+          console.log('getUserProjects: Returning localStorage projects immediately');
+          
+          // Try to fetch from database in the background to keep localStorage in sync
+          setTimeout(() => {
+            fetchProjectsFromDatabase().then(dbProjects => {
+              if (dbProjects.length > 0) {
+                // Merge local and database projects, preferring database versions
+                const mergedProjects = mergeProjects(localProjects, dbProjects);
+                localStorage.setItem('mockProjects', JSON.stringify(mergedProjects));
+                console.log(`getUserProjects: Updated localStorage with ${mergedProjects.length} merged projects`);
+              }
+            }).catch(error => {
+              console.error('getUserProjects: Background fetch error:', error);
+            });
+          }, 100);
+          
+          return localProjects;
+        }
       } else {
         console.log('getUserProjects: No projects found in localStorage');
       }
@@ -304,82 +388,47 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
   }
   
   try {
-    // Get the current user
-    const { data: { user } } = await supabase.auth.getUser();
+    // Fetch projects from database
+    const dbProjects = await fetchProjectsFromDatabase();
     
-    if (!user) {
-      console.warn('getUserProjects: No authenticated user found');
+    // If we have database projects, return them
+    if (dbProjects.length > 0) {
+      console.log(`getUserProjects: Returning ${dbProjects.length} projects from database`);
       
-      if (isDev) {
-        console.log('getUserProjects: Development mode - returning empty array');
-        return [];
-      }
-      
-      throw new Error('Authentication required to get projects');
-    }
-    
-    // Query the database for the user's projects
-    console.log(`getUserProjects: Querying database for user ${user.id}`);
-    const { data: projectsData, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false });
-    
-    if (error) {
-      console.error('getUserProjects: Database error:', error);
-      
-      if (isDev) {
-        console.log('getUserProjects: Development mode - returning empty array despite error');
-        return [];
-      }
-      
-      throw error;
-    }
-    
-    if (!projectsData || projectsData.length === 0) {
-      console.log('getUserProjects: No projects found in database');
-      return [];
-    }
-    
-    console.log(`getUserProjects: Found ${projectsData.length} projects in database`);
-    
-    // For each project, fetch its files
-    const projectsWithFiles = await Promise.all(
-      projectsData.map(async (project) => {
+      // Update localStorage in development mode
+      if (isDev && typeof window !== 'undefined') {
         try {
-          const { data: filesData, error: filesError } = await supabase
-            .from('project_files')
-            .select('*')
-            .eq('project_id', project.id);
-          
-          if (filesError) {
-            console.error(`getUserProjects: Error fetching files for project ${project.id}:`, filesError);
-            return {
-              ...project,
-              files: []
-            };
-          }
-          
-          return {
-            ...project,
-            files: filesData || []
-          };
-        } catch (fileError) {
-          console.error(`getUserProjects: Error processing files for project ${project.id}:`, fileError);
-          return {
-            ...project,
-            files: []
-          };
+          // Merge with any existing localStorage projects to avoid losing local-only projects
+          const mergedProjects = mergeProjects(localProjects, dbProjects);
+          localStorage.setItem('mockProjects', JSON.stringify(mergedProjects));
+          console.log(`getUserProjects: Updated localStorage with ${mergedProjects.length} projects`);
+        } catch (localStorageError) {
+          console.error('getUserProjects: Error updating localStorage:', localStorageError);
         }
-      })
-    );
+      }
+      
+      return dbProjects;
+    }
     
-    console.log('getUserProjects: Successfully fetched projects with files');
-    return projectsWithFiles;
+    // If we're in development mode and have no database projects, return local projects or empty array
+    if (isDev) {
+      console.log('getUserProjects: No database projects found, returning localStorage projects or empty array');
+      return localProjects;
+    }
+    
+    // No projects found
+    console.log('getUserProjects: No projects found');
+    return [];
   } catch (error) {
     console.error('getUserProjects: Error:', error);
     
+    // In development mode, return localStorage projects if available
+    if (isDev && localProjects.length > 0) {
+      console.log('getUserProjects: Returning localStorage projects due to error');
+      return localProjects;
+    }
+    
+    // In development mode with no localStorage projects, return empty array
     if (isDev) {
       console.log('getUserProjects: Development mode - returning empty array due to error');
       return [];
@@ -387,6 +436,200 @@ export async function getUserProjects(): Promise<ProjectContext[]> {
     
     throw error;
   }
+}
+
+// Helper function to fetch projects from database
+async function fetchProjectsFromDatabase(): Promise<ProjectContext[]> {
+  console.log('fetchProjectsFromDatabase: Fetching projects from database');
+  
+  try {
+    // Get the current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError) {
+      console.error('fetchProjectsFromDatabase: Error getting user:', userError);
+      throw userError;
+    }
+    
+    if (!user) {
+      console.warn('fetchProjectsFromDatabase: No authenticated user found');
+      throw new Error('Authentication required to get projects');
+    }
+    
+    // Query the database for the user's projects
+    console.log(`fetchProjectsFromDatabase: Querying database for user ${user.id}`);
+    const { data: projectsData, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false });
+    
+    if (error) {
+      console.error('fetchProjectsFromDatabase: Database error:', error);
+      throw error;
+    }
+    
+    if (!projectsData || projectsData.length === 0) {
+      console.log('fetchProjectsFromDatabase: No projects found in database');
+      return [];
+    }
+    
+    console.log(`fetchProjectsFromDatabase: Found ${projectsData.length} projects in database`);
+    
+    // For each project, fetch its related data
+    const projectsWithData = await Promise.all(
+      projectsData.map(async (project) => {
+        try {
+          // Get project files
+          const { data: filesData, error: filesError } = await supabase
+            .from('extension_files')
+            .select('*')
+            .eq('project_id', project.id);
+          
+          if (filesError) {
+            console.error(`fetchProjectsFromDatabase: Error fetching files for project ${project.id}:`, filesError);
+          }
+          
+          // Get project settings
+          const { data: settingsData, error: settingsError } = await supabase
+            .from('project_settings')
+            .select('*')
+            .eq('project_id', project.id);
+          
+          if (settingsError) {
+            console.error(`fetchProjectsFromDatabase: Error fetching settings for project ${project.id}:`, settingsError);
+          }
+          
+          // Process settings into a more usable format
+          const settings = project.settings || {};
+          if (settingsData && settingsData.length > 0) {
+            settingsData.forEach((setting) => {
+              settings[setting.key] = setting.value;
+            });
+          }
+          
+          // Get deployment history
+          const { data: deploymentHistory, error: deploymentError } = await supabase
+            .from('deployment_history')
+            .select('*')
+            .eq('project_id', project.id)
+            .order('created_at', { ascending: false });
+          
+          if (deploymentError) {
+            console.error(`fetchProjectsFromDatabase: Error fetching deployment history for project ${project.id}:`, deploymentError);
+          }
+          
+          // Get conversations
+          const { data: conversations, error: conversationsError } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('project_id', project.id)
+            .order('updated_at', { ascending: false });
+          
+          if (conversationsError) {
+            console.error(`fetchProjectsFromDatabase: Error fetching conversations for project ${project.id}:`, conversationsError);
+          }
+          
+          // Return the project with all related data
+          return {
+            ...project,
+            files: filesData || [],
+            settings: settings,
+            deployment_history: deploymentHistory || [],
+            conversation_history: conversations || []
+          };
+        } catch (projectError) {
+          console.error(`fetchProjectsFromDatabase: Error processing project ${project.id}:`, projectError);
+          return {
+            ...project,
+            files: [],
+            deployment_history: [],
+            conversation_history: []
+          };
+        }
+      })
+    );
+    
+    console.log('fetchProjectsFromDatabase: Successfully fetched projects with all related data');
+    return projectsWithData;
+  } catch (error) {
+    console.error('fetchProjectsFromDatabase: Error:', error);
+    throw error;
+  }
+}
+
+// Helper function to merge local and database projects
+function mergeProjects(localProjects: ProjectContext[], dbProjects: ProjectContext[]): ProjectContext[] {
+  // Create a map of database projects by ID for quick lookup
+  const dbProjectMap = new Map(dbProjects.map(p => [p.id, p]));
+  
+  // Create a new array with merged projects
+  const mergedProjects = localProjects.map(localProject => {
+    // If the project exists in the database, use the database version
+    // but keep any local-only data that might not be in the database
+    const dbProject = dbProjectMap.get(localProject.id);
+    if (dbProject) {
+      // Remove this project from the map so we don't add it twice
+      dbProjectMap.delete(localProject.id);
+      
+      // Merge the projects, preferring database data but keeping local-only fields
+      return {
+        ...localProject,
+        ...dbProject,
+        // Ensure we keep the most recent files
+        files: mergeFiles(localProject.files, dbProject.files),
+        // Ensure we keep the most recent settings
+        settings: { ...localProject.settings, ...dbProject.settings },
+        // Keep the most recent timestamp
+        updated_at: new Date(Math.max(
+          new Date(localProject.updated_at).getTime(),
+          new Date(dbProject.updated_at).getTime()
+        )).toISOString()
+      };
+    }
+    
+    // If the project doesn't exist in the database, keep the local version
+    return localProject;
+  });
+  
+  // Add any database projects that weren't in localStorage
+  dbProjectMap.forEach(dbProject => {
+    mergedProjects.push(dbProject);
+  });
+  
+  return mergedProjects;
+}
+
+// Helper function to merge files from local and database projects
+function mergeFiles(localFiles: ProjectFile[], dbFiles: ProjectFile[]): ProjectFile[] {
+  // Create a map of database files by ID for quick lookup
+  const dbFileMap = new Map(dbFiles.map(f => [f.id, f]));
+  
+  // Create a new array with merged files
+  const mergedFiles = localFiles.map(localFile => {
+    // If the file exists in the database, use the most recent version
+    const dbFile = dbFileMap.get(localFile.id);
+    if (dbFile) {
+      // Remove this file from the map so we don't add it twice
+      dbFileMap.delete(localFile.id);
+      
+      // Use the most recently updated file
+      const localUpdatedAt = new Date(localFile.updated_at).getTime();
+      const dbUpdatedAt = new Date(dbFile.updated_at).getTime();
+      
+      return localUpdatedAt > dbUpdatedAt ? localFile : dbFile;
+    }
+    
+    // If the file doesn't exist in the database, keep the local version
+    return localFile;
+  });
+  
+  // Add any database files that weren't in the local files
+  dbFileMap.forEach(dbFile => {
+    mergedFiles.push(dbFile);
+  });
+  
+  return mergedFiles;
 }
 
 // Save a project
@@ -553,16 +796,16 @@ export async function deleteProject(projectId: string): Promise<boolean> {
 export async function createNewProject(name: string, description: string): Promise<ProjectContext> {
   console.log('Creating new project:', name, description);
   
-  // Generate a unique ID for the project
+  // Generate a unique project ID using UUID v4 instead of timestamp
   const projectId = uuidv4();
   const now = new Date().toISOString();
   
   // Create a basic manifest
   const manifest: ChromeManifest = {
+    name: name,
+    description: description,
+    version: '1.0.0',
     manifest_version: 3,
-    name,
-    description,
-    version: '0.1.0',
     action: {
       default_popup: 'popup.html',
       default_title: name
@@ -571,13 +814,21 @@ export async function createNewProject(name: string, description: string): Promi
     host_permissions: []
   };
   
-  // Create initial files
-  const initialFiles: ProjectFile[] = [
+  // Create initial project files
+  const files: ProjectFile[] = [
+    {
+      id: uuidv4(),
+      name: 'manifest.json',
+      path: 'manifest.json',
+      content: JSON.stringify(manifest, null, 2),
+      type: ProjectFileType.JSON,
+      created_at: now,
+      updated_at: now
+    },
     {
       id: uuidv4(),
       name: 'popup.html',
       path: 'popup.html',
-      type: ProjectFileType.HTML,
       content: `<!DOCTYPE html>
 <html>
 <head>
@@ -590,6 +841,7 @@ export async function createNewProject(name: string, description: string): Promi
   <script src="popup.js"></script>
 </body>
 </html>`,
+      type: ProjectFileType.HTML,
       created_at: now,
       updated_at: now
     },
@@ -597,7 +849,6 @@ export async function createNewProject(name: string, description: string): Promi
       id: uuidv4(),
       name: 'popup.css',
       path: 'popup.css',
-      type: ProjectFileType.CSS,
       content: `body {
   width: 300px;
   padding: 10px;
@@ -607,6 +858,7 @@ export async function createNewProject(name: string, description: string): Promi
 h1 {
   color: #4285f4;
 }`,
+      type: ProjectFileType.CSS,
       created_at: now,
       updated_at: now
     },
@@ -614,143 +866,58 @@ h1 {
       id: uuidv4(),
       name: 'popup.js',
       path: 'popup.js',
-      type: ProjectFileType.JAVASCRIPT,
-      content: `// Popup script for ${name}
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('${name} popup loaded');
+      content: `document.addEventListener('DOMContentLoaded', function() {
+  console.log('${name} extension loaded!');
 });`,
+      type: ProjectFileType.JAVASCRIPT,
       created_at: now,
       updated_at: now
     },
-    {
-      id: uuidv4(),
-      name: 'manifest.json',
-      path: 'manifest.json',
-      type: ProjectFileType.JSON,
-      content: JSON.stringify(manifest, null, 2),
-      created_at: now,
-      updated_at: now
-    }
   ];
   
-  // Create the new project object
-  const newProject: ProjectContext = {
-    id: projectId,
-    name,
-    description,
-    version: '0.1.0',
-    manifest,
-    files: initialFiles,
-    settings: {
-      theme: 'dark',
-      auto_save: true
-    },
-    created_at: now,
-    updated_at: now,
-    deployment_history: []
-  };
-  
   try {
-    // Check if we're in development mode
-    const isDev = process.env.NODE_ENV === 'development';
-    console.log('Environment:', isDev ? 'development' : 'production');
-    
-    // Always save to localStorage first for quick access
-    try {
-      const existingProjects = JSON.parse(localStorage.getItem('mockProjects') || '[]');
-      localStorage.setItem('mockProjects', JSON.stringify([...existingProjects, newProject]));
-      console.log('Project saved to localStorage:', projectId);
-    } catch (localStorageError) {
-      console.error('Failed to save project to localStorage:', localStorageError);
-    }
-    
-    // Get the current user
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      console.warn('No authenticated user found. Project saved to localStorage only.');
-      if (isDev) {
-        return newProject; // Return the project in dev mode even without auth
-      } else {
-        throw new Error('Authentication required to create a project');
-      }
-    }
-    
-    // Save the project to the database
-    console.log('Saving project to database:', newProject);
-    const { data: projectData, error: projectError } = await supabase
-      .from('projects')
-      .insert({
-        id: projectId,
+    // Create a direct server-side request to create the project
+    const response = await fetch('/api/projects/direct-create/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        projectId,
         name,
         description,
-        version: '0.1.0',
         manifest,
-        settings: {
-          theme: 'dark',
-          auto_save: true
-        },
-        user_id: user.id
+        files
       })
-      .select()
-      .single();
-    
-    if (projectError) {
-      console.error('Error saving project to database:', projectError);
-      if (isDev) {
-        console.warn('Continuing with localStorage project in development mode');
-        return newProject;
-      }
-      throw projectError;
-    }
-    
-    console.log('Project saved to database:', projectData);
-    
-    // Save the files to the database
-    const filePromises = initialFiles.map(async (file) => {
-      const { data: fileData, error: fileError } = await supabase
-        .from('project_files')
-        .insert({
-          id: file.id,
-          project_id: projectId,
-          name: file.name,
-          path: file.path,
-          type: file.type,
-          content: file.content
-        });
-      
-      if (fileError) {
-        console.error(`Error saving file ${file.name} to database:`, fileError);
-        return { success: false, error: fileError };
-      }
-      
-      return { success: true, data: fileData };
     });
     
-    // Wait for all file saves to complete
-    const fileResults = await Promise.all(filePromises);
-    const failedFiles = fileResults.filter((result: { success: boolean }) => !result.success);
-    
-    if (failedFiles.length > 0) {
-      console.warn(`${failedFiles.length} files failed to save to database`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('API error creating project:', errorData);
+      throw new Error(errorData.message || 'Failed to create project');
     }
     
-    console.log('All files saved to database');
+    const projectData = await response.json();
+    console.log('Project created successfully:', projectData);
     
-    // Return the created project with files
+    // Return the project
     return {
-      ...newProject,
-      ...projectData
+      id: projectId,
+      name,
+      description,
+      version: '1.0.0',
+      manifest,
+      files,
+      settings: {
+        theme: 'light',
+        auto_save: true
+      },
+      created_at: now,
+      updated_at: now,
+      deployment_history: []
     };
   } catch (error) {
-    console.error('Error in createNewProject:', error);
-    
-    // In development mode, return the project even if database save fails
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Returning localStorage project due to error in development mode');
-      return newProject;
-    }
-    
+    console.error('Error creating project:', error);
     throw error;
   }
 }
