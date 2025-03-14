@@ -430,6 +430,38 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
     setIsSaving(true);
     
     try {
+      // Generate a title for the conversation if we have enough messages
+      let title = '';
+      if (messages.length >= 2) {
+        try {
+          console.log('ConversationInterface: Generating title for conversation');
+          // Get the API key from localStorage
+          const apiKey = localStorage.getItem('claude_api_key');
+          
+          const titleResponse = await fetch('/api/conversations/generate-title', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              messages,
+              apiKey // Pass the API key to the server
+            }),
+          });
+          
+          if (titleResponse.ok) {
+            const titleData = await titleResponse.json();
+            title = titleData.title;
+            console.log('ConversationInterface: Generated title:', title);
+          } else {
+            console.error('ConversationInterface: Failed to generate title');
+          }
+        } catch (err) {
+          console.error('ConversationInterface: Error generating title:', err);
+          // Continue with saving even if title generation fails
+        }
+      }
+      
       // If we have a specific conversation ID, update that conversation
       if (conversationId) {
         console.log('ConversationInterface: Updating existing conversation:', conversationId);
@@ -444,7 +476,9 @@ For HTML files, use \`\`\`html, for JavaScript files, use \`\`\`javascript, for 
               role: msg.role,
               content: msg.content,
               timestamp: msg.timestamp.toISOString()
-            }))
+            })),
+            // Only update the title if we generated one
+            ...(title && { title })
           }),
         });
         

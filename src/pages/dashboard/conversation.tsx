@@ -105,7 +105,7 @@ export default function ConversationPage() {
         },
         body: JSON.stringify({
           projectId: project.id,
-          title: `Conversation ${new Date().toLocaleString()}`
+          title: 'New Conversation' // Simple initial title, will be updated later
         }),
       });
       
