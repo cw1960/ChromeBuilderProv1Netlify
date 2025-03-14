@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     domains: ['avatars.githubusercontent.com', 'lh3.googleusercontent.com'],
   },
@@ -27,6 +26,14 @@ const nextConfig = {
     
     return config;
   },
+  // Completely disable static generation
+  experimental: {
+    disableOptimizedLoading: true,
+  },
+  // Disable static generation
+  output: 'standalone',
+  // Disable prerendering
+  trailingSlash: true,
 };
 
 module.exports = nextConfig;
