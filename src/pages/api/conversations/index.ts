@@ -4,6 +4,14 @@ import { authOptions } from '../auth/[...nextauth]';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 
+// Define types
+interface Conversation {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  title?: string;
+}
+
 // Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -47,16 +55,26 @@ export default async function handler(
       // Get conversations for the project
       const { data: conversations, error } = await supabase
         .from('conversations')
-        .select('id, title, created_at, updated_at')
+        .select('id, created_at, updated_at')
         .eq('project_id', projectId)
         .order('updated_at', { ascending: false });
 
       if (error) {
+        // If the error is about a missing column, return an empty array
+        if (error.code === '42703') {
+          return res.status(200).json([]);
+        }
         console.error('Error fetching conversations:', error);
         return res.status(500).json({ error: 'Failed to fetch conversations' });
       }
 
-      return res.status(200).json(conversations || []);
+      // Map conversations to include a default title if none exists
+      const conversationsWithTitles = (conversations as Conversation[] || []).map(conv => ({
+        ...conv,
+        title: conv.title || 'Untitled Conversation'
+      }));
+
+      return res.status(200).json(conversationsWithTitles);
     } catch (error) {
       console.error('Error in conversations API:', error);
       return res.status(500).json({ error: 'Internal server error' });

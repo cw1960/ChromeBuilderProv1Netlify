@@ -1,4 +1,4 @@
-import { useState, useCallback, FormEvent, KeyboardEvent } from 'react';
+import { useState, useCallback, FormEvent, KeyboardEvent, useEffect } from 'react';
 import useSearch from '@/hooks/useSearch';
 import { SearchIcon, X } from 'lucide-react';
 
@@ -25,6 +25,11 @@ export default function SearchBox({
   } = useSearch({ type });
   
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
@@ -60,6 +65,10 @@ export default function SearchBox({
     },
     [onResultSelect]
   );
+
+  if (!mounted) {
+    return null;
+  }
   
   return (
     <div className={`relative ${className}`}>

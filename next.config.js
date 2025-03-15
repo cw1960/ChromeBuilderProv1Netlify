@@ -16,24 +16,33 @@ const nextConfig = {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
-      path: false,
-      os: false,
     };
-    
     return config;
   },
-  // Completely disable static generation
   experimental: {
     disableOptimizedLoading: true,
   },
-  // Disable static generation
   output: 'standalone',
-  // Disable prerendering
   trailingSlash: true,
+  pageExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: '/api/:path*',
+      },
+    ];
+  },
+  async redirects() {
+    return [];
+  },
+  async headers() {
+    return [];
+  },
 };
 
 module.exports = nextConfig;

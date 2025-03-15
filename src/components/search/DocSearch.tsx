@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ExternalLink } from 'lucide-react';
 import SearchBox from './SearchBox';
 import { SearchResult } from '@/lib/search-api';
@@ -9,12 +9,23 @@ interface DocSearchProps {
 
 export default function DocSearch({ className = '' }: DocSearchProps) {
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const handleResultSelect = (result: SearchResult) => {
     setSelectedResult(result);
     // Open the URL in a new tab
-    window.open(result.url, '_blank', 'noopener,noreferrer');
+    if (mounted) {
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    }
   };
+
+  if (!mounted) {
+    return null;
+  }
   
   return (
     <div className={`flex flex-col gap-4 ${className}`}>

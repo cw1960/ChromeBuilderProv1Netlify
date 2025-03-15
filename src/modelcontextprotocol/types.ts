@@ -78,13 +78,9 @@ export enum ProjectFileType {
 
 // Project settings interface
 export interface ProjectSettings {
+  theme: string;
+  auto_save: boolean;
   template_id?: string;
-  api_key?: string;
-  theme?: 'light' | 'dark';
-  auto_save?: boolean;
-  collaboration_enabled?: boolean;
-  collaborators?: string[];
-  custom_settings?: Record<string, any>;
 }
 
 // Deployment record for version history

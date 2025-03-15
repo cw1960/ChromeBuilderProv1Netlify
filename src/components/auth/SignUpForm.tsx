@@ -1,86 +1,51 @@
-import { useState, useEffect } from 'react';
-import { signIn, useSession } from 'next-auth/react';
+import { useState } from 'react';
 import { useRouter } from 'next/router';
-import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function SignUpForm() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const { callbackUrl } = router.query;
+  const { mounted, handleSignUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [mounted, setMounted] = useState(false);
 
-  // Handle mounting to prevent hydration issues
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  if (!mounted) {
+    return null;
+  }
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (mounted && status === 'authenticated' && session) {
-      router.push(callbackUrl ? String(callbackUrl) : '/dashboard');
-    }
-  }, [mounted, status, session, router, callbackUrl]);
+  if (status === 'loading') {
+    return <div>Loading...</div>;
+  }
+
+  if (session) {
+    router.push('/dashboard');
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
-    // Validate passwords match
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       setIsLoading(false);
       return;
     }
 
-    try {
-      // Create account
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+    const result = await handleSignUp(email, password);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to create account');
-      }
-
-      // Sign in with new credentials
-      const result = await signIn('credentials', {
-        redirect: false,
-        email,
-        password,
-      });
-
-      if (result?.error) {
-        setError(result.error);
-        setIsLoading(false);
-      } else {
-        // Redirect to callback URL or dashboard
-        router.push(callbackUrl ? String(callbackUrl) : '/dashboard');
-      }
-    } catch (err: any) {
-      console.error('Sign up error:', err);
-      setError(err.message || 'An unexpected error occurred. Please try again.');
+    if (result.error) {
+      setError(result.error);
       setIsLoading(false);
+    } else {
+      router.push('/dashboard');
     }
   };
-
-  // Show loading state while checking session
-  if (!mounted || status === 'loading') {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-xl">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full space-y-8">
@@ -121,7 +86,7 @@ export default function SignUpForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1 block w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
-              placeholder="password123"
+              placeholder="••••••••"
             />
           </div>
           <div>
@@ -137,7 +102,7 @@ export default function SignUpForm() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="mt-1 block w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
-              placeholder="password123"
+              placeholder="••••••••"
             />
           </div>
         </div>
@@ -153,16 +118,23 @@ export default function SignUpForm() {
         </div>
       </form>
 
-      <div className="mt-6 text-center">
-        <p className="text-sm">
-          Already have an account?{' '}
-          <Link href="/auth/signin" className="text-primary hover:text-primary/80">
-            Sign in
-          </Link>
-        </p>
-        <Link href="/" className="text-sm text-primary hover:text-primary/80 block mt-2">
-          Return to home
-        </Link>
+      <div className="mt-6 text-center space-y-2">
+        <div>
+          <button
+            onClick={() => router.push('/auth/signin')}
+            className="text-sm text-primary hover:text-primary/80"
+          >
+            Already have an account? Sign in
+          </button>
+        </div>
+        <div>
+          <button
+            onClick={() => router.push('/')}
+            className="text-sm text-primary hover:text-primary/80"
+          >
+            Return to home
+          </button>
+        </div>
       </div>
     </div>
   );

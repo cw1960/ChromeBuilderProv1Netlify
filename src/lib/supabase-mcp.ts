@@ -8,6 +8,9 @@ import { Message } from '@/types/message';
 import { CodeFile } from '@/types/code';
 // Remove the import from @/types
 
+// Re-export ProjectFileType
+export { ProjectFileType };
+
 // Create a Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -116,13 +119,9 @@ export interface ProjectFile {
 
 // Project settings interface
 export interface ProjectSettings {
+  theme: string;
+  auto_save: boolean;
   template_id?: string;
-  api_key?: string;
-  theme?: 'light' | 'dark';
-  auto_save?: boolean;
-  collaboration_enabled?: boolean;
-  collaborators?: string[];
-  custom_settings?: Record<string, any>;
 }
 
 // Deployment record for version history
@@ -1117,19 +1116,57 @@ export const saveConversationAndCode = async (
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) {
       console.error('saveConversationAndCode: User not authenticated', userError);
-      return false;
+      throw new Error('User authentication failed');
     }
     
     // Get project to verify ownership
     const project = await getProject(projectId);
     if (!project) {
       console.error('saveConversationAndCode: Project not found', projectId);
-      return false;
+      throw new Error('Project not found');
+    }
+    
+    // Get or create a conversation for this project
+    let conversationId: string;
+    const { data: existingConversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (conversationError || !existingConversation) {
+      console.log('saveConversationAndCode: No existing conversation found, creating new one');
+      // Create a new conversation
+      const { data: newConversation, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          project_id: projectId,
+          user_id: userData.user.id,
+          title: 'New Conversation',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (createError || !newConversation) {
+        console.error('saveConversationAndCode: Error creating conversation', createError);
+        throw new Error('Failed to create new conversation');
+      }
+      
+      conversationId = newConversation.id;
+      console.log('saveConversationAndCode: Created new conversation:', conversationId);
+    } else {
+      conversationId = existingConversation.id;
+      console.log('saveConversationAndCode: Using existing conversation:', conversationId);
     }
     
     // Save conversation entries
     console.log(`saveConversationAndCode: Saving ${messages.length} conversation entries`);
     let conversationSaveSuccess = true;
+    let failedMessages: string[] = [];
     
     for (const message of messages) {
       try {
@@ -1138,31 +1175,37 @@ export const saveConversationAndCode = async (
           .upsert({
             id: message.id,
             project_id: projectId,
+            conversation_id: conversationId,
+            user_id: userData.user.id,
             role: message.role,
             content: message.content,
+            timestamp: message.timestamp,
             created_at: message.timestamp,
-            metadata: message.metadata || {},
+            updated_at: new Date().toISOString(),
+            metadata: message.metadata || {}
           });
           
         if (error) {
           console.error('saveConversationAndCode: Error saving conversation entry', error);
           conversationSaveSuccess = false;
-          // Continue to try saving other messages
+          failedMessages.push(message.id);
         }
       } catch (err) {
         console.error('saveConversationAndCode: Exception saving conversation entry', err);
         conversationSaveSuccess = false;
-        // Continue to try saving other messages
+        failedMessages.push(message.id);
       }
     }
     
     if (!conversationSaveSuccess) {
-      console.warn('saveConversationAndCode: Some conversation entries failed to save');
+      console.warn('saveConversationAndCode: Failed to save messages:', failedMessages);
+      throw new Error(`Failed to save ${failedMessages.length} conversation entries`);
     }
     
     // Save files
     console.log(`saveConversationAndCode: Saving ${files.length} files`);
     let fileSaveSuccess = true;
+    let failedFiles: string[] = [];
     
     for (const file of files) {
       try {
@@ -1177,23 +1220,24 @@ export const saveConversationAndCode = async (
             content: file.content,
             created_at: file.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            metadata: file.metadata || {},
+            metadata: file.metadata || {}
           });
           
         if (error) {
           console.error('saveConversationAndCode: Error saving file', file.path, error);
           fileSaveSuccess = false;
-          // Continue to try saving other files
+          failedFiles.push(file.path);
         }
       } catch (err) {
         console.error('saveConversationAndCode: Exception saving file', file.path, err);
         fileSaveSuccess = false;
-        // Continue to try saving other files
+        failedFiles.push(file.path);
       }
     }
     
     if (!fileSaveSuccess) {
-      console.warn('saveConversationAndCode: Some files failed to save');
+      console.warn('saveConversationAndCode: Failed to save files:', failedFiles);
+      throw new Error(`Failed to save ${failedFiles.length} files`);
     }
     
     // Update project timestamp
@@ -1205,84 +1249,18 @@ export const saveConversationAndCode = async (
         
       if (updateError) {
         console.error('saveConversationAndCode: Error updating project timestamp', updateError);
+        // Don't throw here as this is not critical
       }
     } catch (err) {
       console.error('saveConversationAndCode: Exception updating project timestamp', err);
+      // Don't throw here as this is not critical
     }
     
-    // Update local storage cache if in development mode
-    if (process.env.NODE_ENV === 'development') {
-      try {
-        // Get existing projects from localStorage
-        const existingProjectsJson = localStorage.getItem('projects');
-        let cachedProjects: any[] = [];
-        
-        if (existingProjectsJson) {
-          try {
-            cachedProjects = JSON.parse(existingProjectsJson);
-          } catch (err) {
-            console.error('saveConversationAndCode: Error parsing cached projects', err);
-            // Continue with empty array
-          }
-        }
-        
-        // Find the project in the cached projects
-        const projectIndex = cachedProjects.findIndex((p) => p.id === projectId);
-        
-        if (projectIndex !== -1) {
-          // Update the project's conversation history
-          cachedProjects[projectIndex].conversation_history = messages.map((message) => ({
-            id: message.id,
-            timestamp: message.timestamp,
-            role: message.role,
-            content: message.content,
-            tokens_used: message.metadata?.tokens_used || 0,
-            files_modified: message.metadata?.files_modified || [],
-          }));
-          
-          // Update the project's files
-          for (const file of files) {
-            const existingFileIndex = cachedProjects[projectIndex].files.findIndex(
-              (f: any) => f.path === file.path
-            );
-            
-            if (existingFileIndex !== -1) {
-              // Update existing file
-              cachedProjects[projectIndex].files[existingFileIndex].content = file.content;
-              cachedProjects[projectIndex].files[existingFileIndex].updated_at = new Date().toISOString();
-            } else {
-              // Add new file
-              cachedProjects[projectIndex].files.push({
-                id: file.id,
-                name: file.name,
-                path: file.path,
-                type: file.type,
-                content: file.content,
-                created_at: file.created_at || new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                metadata: file.metadata || {},
-              });
-            }
-          }
-          
-          // Update the project's updated_at timestamp
-          cachedProjects[projectIndex].updated_at = new Date().toISOString();
-          
-          // Save the updated projects back to localStorage
-          localStorage.setItem('projects', JSON.stringify(cachedProjects));
-          console.log('saveConversationAndCode: Updated local storage cache');
-        }
-      } catch (err) {
-        console.error('saveConversationAndCode: Error updating localStorage cache', err);
-        // Continue execution - localStorage failure shouldn't prevent success
-      }
-    }
-    
-    console.log('saveConversationAndCode: Successfully saved conversation and code');
+    console.log('saveConversationAndCode: Successfully completed save process');
     return true;
   } catch (err) {
-    console.error('saveConversationAndCode: Unexpected error during save process', err);
-    return false;
+    console.error('saveConversationAndCode: Save process failed:', err);
+    throw err;
   }
 };
 

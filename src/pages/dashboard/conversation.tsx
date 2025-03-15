@@ -42,8 +42,12 @@ export default function ConversationPage() {
         const response = await fetch(`/api/projects/get-project?projectId=${projectId}`);
         
         if (!response.ok) {
-          console.error('Conversation: Error fetching project from API:', await response.text());
-          setError('Project not found');
+          const errorText = await response.text();
+          console.error('Conversation: Error fetching project from API:', errorText);
+          // Only set error if it's not a 404 (project not found)
+          if (response.status !== 404) {
+            setError('Failed to load project');
+          }
           setIsLoading(false);
           return;
         }
@@ -51,6 +55,7 @@ export default function ConversationPage() {
         const data = await response.json();
         console.log('Conversation: Project loaded successfully from API:', data.project.name);
         setProject(data.project);
+        setError(null); // Clear any existing errors
       } catch (err) {
         console.error('Conversation: Error loading project:', err);
         setError('Failed to load project');

@@ -40,12 +40,15 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('ConversationSidebar: Failed to load conversations', response.status, errorData);
-        throw new Error(`Failed to load conversations: ${response.status}`);
+        if (response.status !== 404) {
+          throw new Error(`Failed to load conversations: ${response.status}`);
+        }
       }
       
       const data = await response.json();
       console.log(`ConversationSidebar: Loaded ${data.length} conversations`);
       setConversations(data);
+      setError(null);
     } catch (err) {
       console.error('ConversationSidebar: Error loading conversations:', err);
       setError('Failed to load conversations');
@@ -142,8 +145,14 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             </button>
           </div>
         ) : conversations.length === 0 ? (
-          <div className="text-gray-500 dark:text-gray-400 text-sm p-2">
-            No conversations yet. Start a new one!
+          <div className="text-gray-500 dark:text-gray-400 text-sm p-2 text-center">
+            <p>No conversations yet.</p>
+            <button 
+              onClick={onNewConversation}
+              className="mt-2 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              Start a new conversation
+            </button>
           </div>
         ) : (
           <ul className="space-y-1">

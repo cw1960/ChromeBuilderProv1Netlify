@@ -1,8 +1,7 @@
-import { useCallback, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useCallback, useState, useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import Link from 'next/link';
 import { ArrowLeft, Book, Code, Globe } from 'lucide-react';
 import { DocSearch, CodeSearch, SearchBox } from '@/components/search';
 import { SearchResult } from '@/lib/search-api';
@@ -12,15 +11,26 @@ export default function SearchPage() {
   const router = useRouter();
   const [selectedTab, setSelectedTab] = useState<'web' | 'docs' | 'code'>('web');
   const [importedCode, setImportedCode] = useState<{ code: string; source: string } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && status === 'unauthenticated') {
+      window.location.href = '/';
+    }
+  }, [mounted, status]);
   
+  // Show nothing until mounted
+  if (!mounted) {
+    return null;
+  }
+
   // Check authentication
   if (status === 'loading') {
     return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
-  }
-  
-  if (status === 'unauthenticated') {
-    router.push('/');
-    return null;
   }
   
   const handleWebResultSelect = (result: SearchResult) => {
@@ -40,13 +50,13 @@ export default function SearchPage() {
       <header className="border-b border-border">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <Link 
-              href="/dashboard"
+            <button
+              onClick={() => window.location.href = '/dashboard'}
               className="mr-2 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft size={16} className="mr-1" />
               Back to Dashboard
-            </Link>
+            </button>
             <h1 className="text-2xl font-bold">Search Resources</h1>
           </div>
           
@@ -54,12 +64,12 @@ export default function SearchPage() {
             <span className="text-sm text-muted-foreground">
               {session?.user?.email}
             </span>
-            <Link 
-              href="/api/auth/signout"
+            <button
+              onClick={() => signOut()}
               className="text-sm text-primary hover:underline"
             >
               Sign out
-            </Link>
+            </button>
           </div>
         </div>
       </header>

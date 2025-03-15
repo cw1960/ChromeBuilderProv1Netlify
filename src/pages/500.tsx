@@ -1,24 +1,40 @@
 import Head from 'next/head';
-import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 export default function Custom500() {
+  const router = useRouter();
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center py-2">
       <Head>
-        <title>500 - Server Error | Chrome Builder</title>
+        <title>500 - Server Error | ChromeBuilder Pro</title>
+        <link rel="icon" href="/favicon.ico" />
       </Head>
-      
-      <div className="text-center">
-        <h1 className="text-6xl font-bold text-blue-600 dark:text-blue-400 mb-4">500</h1>
-        <p className="text-xl text-gray-700 dark:text-gray-300 mb-8">
-          Oops! Something went wrong on our server.
-        </p>
-        <Link href="/">
-          <span className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 cursor-pointer">
-            Go back home
-          </span>
-        </Link>
-      </div>
+      <main className="flex w-full flex-1 flex-col items-center justify-center px-20 text-center">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <h1 className="text-4xl font-bold">
+              <span className="bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
+                ChromeBuilder Pro
+              </span>
+            </h1>
+            <h2 className="mt-6 text-3xl font-bold">Server Error</h2>
+          </div>
+          <div className="w-full space-y-8">
+            <div className="rounded-md bg-red-50 p-4 text-red-800">
+              <p>Something went wrong on our end. Please try again later.</p>
+            </div>
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => router.push('/')}
+                className="text-sm text-primary hover:text-primary/80"
+              >
+                Return to home
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 } 

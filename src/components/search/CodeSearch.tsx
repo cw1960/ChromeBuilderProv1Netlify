@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ExternalLink, Code, Copy } from 'lucide-react';
 import SearchBox from './SearchBox';
 import { SearchResult } from '@/lib/search-api';
@@ -11,13 +11,18 @@ interface CodeSearchProps {
 export default function CodeSearch({ className = '', onCodeImport }: CodeSearchProps) {
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const handleResultSelect = (result: SearchResult) => {
     setSelectedResult(result);
   };
   
   const handleCopyUrl = () => {
-    if (selectedResult) {
+    if (selectedResult && mounted) {
       navigator.clipboard.writeText(selectedResult.url);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
@@ -34,6 +39,10 @@ export default function CodeSearch({ className = '', onCodeImport }: CodeSearchP
       );
     }
   };
+
+  if (!mounted) {
+    return null;
+  }
   
   return (
     <div className={`flex flex-col gap-4 ${className}`}>

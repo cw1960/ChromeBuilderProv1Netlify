@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SearchResult, SearchOptions } from '@/lib/search-api';
 
 interface UseSearchProps {
@@ -26,9 +26,16 @@ export default function useSearch({
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const search = useCallback(
     async (query?: string): Promise<SearchResult[]> => {
+      if (!mounted) return [];
+
       const queryToUse = query || searchQuery;
       if (!queryToUse) return [];
 
@@ -68,11 +75,11 @@ export default function useSearch({
         setIsLoading(false);
       }
     },
-    [searchQuery, type]
+    [searchQuery, type, mounted]
   );
 
   const searchMore = useCallback(async (): Promise<SearchResult[]> => {
-    if (!searchQuery || !hasMore || isLoading) return [];
+    if (!mounted || !searchQuery || !hasMore || isLoading) return [];
 
     setIsLoading(true);
     setError(null);
@@ -106,7 +113,7 @@ export default function useSearch({
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, type, offset, hasMore, isLoading, results]);
+  }, [searchQuery, type, offset, hasMore, isLoading, results, mounted]);
 
   return {
     isLoading,
