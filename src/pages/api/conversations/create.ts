@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { createClient } from '@supabase/supabase-js';
+import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only allow POST requests
@@ -51,15 +52,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ message: 'Project not found' });
     }
 
+    // Generate a new UUID for the conversation
+    const conversationId = uuidv4();
+    console.log('Generated conversation ID:', conversationId);
+
+    // Create a conversation object with all required fields
+    const conversationData = {
+      id: conversationId,
+      project_id: projectId,
+      title,
+      messages: [],
+      metadata: {},
+      user_id: session.user.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('Creating conversation with data:', conversationData);
+
     // Create the conversation
     const { data: conversation, error } = await supabaseAdmin
       .from('conversations')
-      .insert({
-        project_id: projectId,
-        title,
-        messages: [],
-        metadata: {}
-      })
+      .insert(conversationData)
       .select()
       .single();
 

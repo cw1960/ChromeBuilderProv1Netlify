@@ -38,8 +38,10 @@ Chrome Builder is an AI-powered application that helps non-technical users creat
    ```
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_URL=http://localhost:3336
    NEXTAUTH_SECRET=your_nextauth_secret
+   NEXT_PUBLIC_SITE_URL=http://localhost:3336
+   PORT=3336
    ```
 
 4. Start the development server:
@@ -49,7 +51,7 @@ Chrome Builder is an AI-powered application that helps non-technical users creat
    yarn dev
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+5. Open [http://localhost:3336](http://localhost:3336) in your browser to see the application.
 
 ## Usage
 
@@ -80,6 +82,16 @@ The AI assistant tracks progress through these formal development milestones:
 - **AI**: Claude 3.7 Sonnet
 - **Authentication**: NextAuth.js
 - **Database**: Supabase
+
+## Port Configuration
+
+**IMPORTANT**: This application is configured to run on port 3336. Port 3335 is known to cause conflicts and should never be used. If you encounter port conflicts, run:
+
+```bash
+npm run fix-ports
+```
+
+This will kill any processes using ports 3335 and 3336, allowing the application to start cleanly.
 
 ## Contributing
 

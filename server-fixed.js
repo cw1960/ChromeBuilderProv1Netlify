@@ -10,7 +10,7 @@ const handle = app.getRequestHandler();
 
 // Parse command line arguments for port
 const args = process.argv.slice(2);
-let PORT = process.env.PORT || 3336;
+let PORT = process.env.PORT || 3336; // Default to 3336 instead of 3335
 
 // Check for --port argument
 for (let i = 0; i < args.length; i++) {
@@ -20,13 +20,15 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-// CRITICAL: Ensure we're not using port 3335 which causes conflicts
+// Ensure we're not using port 3335 which seems to cause conflicts
 if (PORT === 3335) {
   console.log('Port 3335 is known to cause conflicts. Using port 3336 instead.');
   PORT = 3336;
 }
 
-// Create or update .env.local file to ensure PORT is set correctly
+console.log(`Starting server on port ${PORT}`);
+
+// Create a .env.local file to ensure the port is set correctly
 try {
   const envPath = path.join(__dirname, '.env.local');
   let envContent = '';
@@ -48,8 +50,6 @@ try {
 } catch (error) {
   console.error('Error updating .env.local file:', error);
 }
-
-console.log(`Starting server on port ${PORT}`);
 
 app.prepare().then(() => {
   createServer((req, res) => {

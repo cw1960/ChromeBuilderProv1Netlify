@@ -13,6 +13,7 @@ import DashboardHeader from '@/components/layout/DashboardHeader';
 import toast from 'react-hot-toast';
 import { Message } from '@/types/message';
 import { CodeFile } from '@/types/code';
+import { supabase } from '@/lib/supabase-mcp';
 
 export default function ConversationPage() {
   const { data: session, status } = useSession();
@@ -24,6 +25,43 @@ export default function ConversationPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  
+  // Check Supabase connection
+  const checkSupabaseConnection = async () => {
+    try {
+      console.log('Conversation: Checking Supabase connection');
+      const { data, error } = await supabase.from('projects').select('count').limit(1);
+      
+      if (error) {
+        console.error('Conversation: Supabase connection error:', error);
+        setError(`Database connection error: ${error.message}`);
+        return false;
+      }
+      
+      console.log('Conversation: Supabase connection successful');
+      return true;
+    } catch (err) {
+      console.error('Conversation: Error checking Supabase connection:', err);
+      setError(`Database connection error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return false;
+    }
+  };
+  
+  // Check for Claude API key and Supabase connection
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const apiKey = localStorage.getItem('claude_api_key');
+      if (!apiKey) {
+        console.log('Conversation: No Claude API key found in localStorage');
+        // We don't set an error here, as the ConversationInterface will handle this
+      } else {
+        console.log('Conversation: Claude API key found in localStorage');
+      }
+      
+      // Check Supabase connection
+      checkSupabaseConnection();
+    }
+  }, []);
   
   // Load project if projectId is provided
   useEffect(() => {
@@ -38,16 +76,24 @@ export default function ConversationPage() {
         setIsLoading(true);
         
         // Use the direct API endpoint to get the project
-        console.log('Conversation: Fetching project from API');
-        const response = await fetch(`/api/projects/get-project?projectId=${projectId}`);
+        console.log('Conversation: Fetching project from direct API');
+        const response = await fetch(`/api/projects/direct-get-project?projectId=${projectId}`);
         
         if (!response.ok) {
           const errorText = await response.text();
           console.error('Conversation: Error fetching project from API:', errorText);
-          // Only set error if it's not a 404 (project not found)
-          if (response.status !== 404) {
-            setError('Failed to load project');
+          
+          // Provide more specific error messages based on status code
+          if (response.status === 404) {
+            setError(`Project not found (ID: ${projectId}). Please check the project ID and try again.`);
+          } else if (response.status === 401 || response.status === 403) {
+            setError('You do not have permission to access this project. Please sign in or contact the project owner.');
+          } else if (response.status >= 500) {
+            setError('Server error while loading project. Please try again later or contact support.');
+          } else {
+            setError(`Failed to load project: ${errorText || response.statusText}`);
           }
+          
           setIsLoading(false);
           return;
         }
@@ -58,7 +104,7 @@ export default function ConversationPage() {
         setError(null); // Clear any existing errors
       } catch (err) {
         console.error('Conversation: Error loading project:', err);
-        setError('Failed to load project');
+        setError(`Failed to load project: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setIsLoading(false);
       }
@@ -107,7 +153,7 @@ export default function ConversationPage() {
     
     try {
       console.log('Conversation: Creating new conversation');
-      const response = await fetch('/api/conversations/create', {
+      const response = await fetch('/api/conversations/direct-create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +172,7 @@ export default function ConversationPage() {
       console.log('Conversation: New conversation created:', conversation.id);
       
       // Navigate to the new conversation
-      router.push(`/dashboard/conversation?projectId=${project.id}&conversationId=${conversation.id}`);
+      router.push(`/dashboard/conversation?projectId=${project.id}&conversationId=${conversation.conversation.id}`);
     } catch (err) {
       console.error('Conversation: Error creating conversation:', err);
       alert('Failed to create new conversation');
@@ -162,7 +208,7 @@ export default function ConversationPage() {
         if (!currentConversationId) {
           try {
             console.log('Conversation: Creating new conversation');
-            const response = await fetch('/api/conversations', {
+            const response = await fetch('/api/conversations/direct-create', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -178,7 +224,7 @@ export default function ConversationPage() {
             }
             
             const data = await response.json();
-            currentConversationId = data.id;
+            currentConversationId = data.conversation.id;
             console.log('Conversation: New conversation created:', currentConversationId);
             
             // Update URL with new project ID and conversation ID without reloading
@@ -214,7 +260,7 @@ export default function ConversationPage() {
         if (!currentConversationId) {
           try {
             console.log('Conversation: Creating new conversation for existing project');
-            const response = await fetch('/api/conversations', {
+            const response = await fetch('/api/conversations/direct-create', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -230,7 +276,7 @@ export default function ConversationPage() {
             }
             
             const data = await response.json();
-            currentConversationId = data.id;
+            currentConversationId = data.conversation.id;
             console.log('Conversation: New conversation created:', currentConversationId);
             
             // Update URL with conversation ID without reloading

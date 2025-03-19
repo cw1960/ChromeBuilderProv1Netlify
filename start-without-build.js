@@ -8,8 +8,8 @@ process.env.NODE_ENV = 'development';
 const app = next({ dev: true });
 const handle = app.getRequestHandler();
 
-// Use port 3335 to avoid conflicts with existing processes
-const PORT = process.env.PORT || 3335;
+// Use port 3336 to avoid conflicts with existing processes
+const PORT = process.env.PORT || 3336;
 
 console.log('Starting server without build...');
 console.log(`Server will run on http://localhost:${PORT}`);

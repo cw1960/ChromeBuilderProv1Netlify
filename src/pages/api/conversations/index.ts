@@ -105,29 +105,32 @@ export default async function handler(
 
       // Create a new conversation
       const conversationId = uuidv4();
+      console.log('Generated conversation ID:', conversationId);
+
+      // Create a conversation object with all required fields
+      const conversationData = {
+        id: conversationId,
+        project_id: projectId,
+        title: title || 'New Conversation',
+        user_id: userId,
+        messages: [],
+        metadata: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      console.log('Creating conversation with data:', conversationData);
+
       const { error } = await supabase
         .from('conversations')
-        .insert({
-          id: conversationId,
-          project_id: projectId,
-          title: title || 'New Conversation',
-          user_id: userId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        .insert(conversationData);
 
       if (error) {
         console.error('Error creating conversation:', error);
         return res.status(500).json({ error: 'Failed to create conversation' });
       }
 
-      return res.status(201).json({ 
-        id: conversationId,
-        project_id: projectId,
-        title: title || 'New Conversation',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+      return res.status(201).json(conversationData);
     } catch (error) {
       console.error('Error in conversations API:', error);
       return res.status(500).json({ error: 'Internal server error' });

@@ -32,26 +32,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     console.log(`Get Project API: Fetching project: ${projectId}`);
     
-    // Query the database for the project
-    const { data: project, error: projectError } = await supabaseAdmin
+    // First, check if the project exists and how many records match the ID
+    const { data: projectCheck, error: checkError } = await supabaseAdmin
+      .from('projects')
+      .select('id, name')
+      .eq('id', projectId);
+    
+    if (checkError) {
+      console.error('Get Project API: Error checking project:', checkError);
+      return res.status(500).json({ 
+        message: 'Error checking project',
+        error: checkError
+      });
+    }
+    
+    if (!projectCheck || projectCheck.length === 0) {
+      console.log(`Get Project API: Project not found: ${projectId}`);
+      return res.status(404).json({ message: 'Project not found' });
+    }
+    
+    if (projectCheck.length > 1) {
+      console.error(`Get Project API: Multiple projects found with ID ${projectId}. Count: ${projectCheck.length}`);
+      // Handle the case where multiple projects have the same ID
+      // We'll use the first one for now
+      console.log('Get Project API: Using the first project found');
+    }
+    
+    // Query the database for the project, but don't use single() to avoid the error
+    const { data: projectData, error: projectError } = await supabaseAdmin
       .from('projects')
       .select('*')
-      .eq('id', projectId)
-      .single();
+      .eq('id', projectId);
     
     if (projectError) {
       console.error('Get Project API: Error fetching project:', projectError);
       return res.status(500).json({ 
         message: 'Error fetching project',
-        error: projectError.message
+        error: projectError
       });
     }
     
-    if (!project) {
+    if (!projectData || projectData.length === 0) {
       console.log(`Get Project API: Project not found: ${projectId}`);
       return res.status(404).json({ message: 'Project not found' });
     }
     
+    // Use the first project if multiple were found
+    const project = projectData[0];
     console.log(`Get Project API: Project found: ${project.name}`);
     
     // Get project files
