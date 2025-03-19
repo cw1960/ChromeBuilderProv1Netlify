@@ -51,7 +51,6 @@
     "next": "^14.2.24",
     "next-auth": "^4.24.6",
     "next-themes": "^0.2.1",
-    "posix": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.51.0",

@@ -1,3 +1,24 @@
+/**
+ * Fix for the "too many open files" error in server.js
+ * This script modifies the server.js file to increase the file handle limit
+ * Uses a safe approach without the vulnerable posix package
+ */
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+// Read the current server.js file
+const serverFilePath = path.join(process.cwd(), 'server.js');
+let serverContent = fs.readFileSync(serverFilePath, 'utf8');
+
+// Check if the fix has already been applied
+if (serverContent.includes('// Increase file handle limit')) {
+  console.log('❌ Fix already applied. No changes needed.');
+  process.exit(0);
+}
+
+// Add fix at the top of the file
+const fix = `
 // Increase file handle limit in a safe way
 const os = require('os');
 const { execSync } = require('child_process');
@@ -33,7 +54,7 @@ try {
         // Try to increase soft limit to hard limit
         if (parseInt(softLimit) < parseInt(hardLimit)) {
           try {
-            execSync(`ulimit -Sn ${hardLimit}`);
+            execSync(\`ulimit -Sn \${hardLimit}\`);
             const newSoftLimit = execSync('ulimit -Sn').toString().trim();
             console.log('New soft limit:', newSoftLimit);
           } catch (limitErr) {
@@ -52,65 +73,20 @@ try {
   console.warn('This is not critical but might affect server performance under heavy load.');
 }
 
-const { createServer } = require('http');
-const { parse } = require('url');
-const next = require('next');
-const fs = require('fs');
-const path = require('path');
+`;
 
-const dev = process.env.NODE_ENV !== 'production';
-const app = next({ dev });
-const handle = app.getRequestHandler();
-
-// Parse command line arguments for port
-const args = process.argv.slice(2);
-let PORT = process.env.PORT || 3336;
-
-// Check for --port argument
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--port' && i + 1 < args.length) {
-    PORT = parseInt(args[i + 1], 10);
-    break;
-  }
+// Add the fix at the top of the file, after any shebang or initial comments
+if (serverContent.startsWith('#!')) {
+  // If there's a shebang, keep it at the top
+  const lines = serverContent.split('\n');
+  const shebang = lines[0];
+  serverContent = shebang + '\n' + fix + lines.slice(1).join('\n');
+} else {
+  serverContent = fix + serverContent;
 }
 
-// CRITICAL: Ensure we're not using port 3335 which causes conflicts
-if (PORT === 3335) {
-  console.log('Port 3335 is known to cause conflicts. Using port 3336 instead.');
-  PORT = 3336;
-}
+// Write the updated content back to the file
+fs.writeFileSync(serverFilePath, serverContent);
 
-// Create or update .env.local file to ensure PORT is set correctly
-try {
-  const envPath = path.join(__dirname, '.env.local');
-  let envContent = '';
-  
-  if (fs.existsSync(envPath)) {
-    envContent = fs.readFileSync(envPath, 'utf8');
-    // Replace or add PORT variable
-    if (envContent.includes('PORT=')) {
-      envContent = envContent.replace(/PORT=\d+/, `PORT=${PORT}`);
-    } else {
-      envContent += `\nPORT=${PORT}`;
-    }
-  } else {
-    envContent = `PORT=${PORT}`;
-  }
-  
-  fs.writeFileSync(envPath, envContent);
-  console.log(`.env.local updated with PORT=${PORT}`);
-} catch (error) {
-  console.error('Error updating .env.local file:', error);
-}
-
-console.log(`Starting server on port ${PORT}`);
-
-app.prepare().then(() => {
-  createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  }).listen(PORT, (err) => {
-    if (err) throw err;
-    console.log(`> Ready on http://localhost:${PORT}`);
-  });
-}); 
+console.log('✅ Server file updated with a safer fix for "too many open files" error.');
+console.log('This version does not use the vulnerable posix package.') 
