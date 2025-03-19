@@ -29,6 +29,28 @@ This vulnerability could potentially cause the server to crash when certain oper
 - Regularly scan for security vulnerabilities using GitHub Dependabot
 - Keep all dependencies updated to their latest secure versions
 
+## Dependency Updates
+
+### 1. Update to Next.js 15.2.2 and related packages
+
+**Date Updated**: March 19, 2025
+
+**Packages Updated**:
+- next: 14.2.24 → 15.2.2
+- next-themes: 0.2.1 → 0.4.6
+- eslint-config-next: 14.1.0 → 15.2.2
+
+**Reason for Update**:  
+These updates were recommended by GitHub Dependabot to address potential security vulnerabilities and ensure compatibility between the packages. Keeping dependencies updated helps maintain the security posture of the application.
+
+**Commit**: [8d88bec](https://github.com/cw1960/ChromeBuilderProv1Netlify/commit/8d88bec)
+
+**Benefits**:
+- Security patches and bug fixes from newer versions
+- Latest features and improvements in the Next.js framework
+- Better compatibility with modern web standards
+- Reduced technical debt by staying current with dependencies
+
 ## Security Best Practices
 
 1. **Dependency Management**:
