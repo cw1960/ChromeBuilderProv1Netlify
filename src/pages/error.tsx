@@ -8,6 +8,7 @@ export default function ErrorPage() {
   const { theme } = useTheme();
   const [systemStatus, setSystemStatus] = useState<'loading' | 'online' | 'offline'>('loading');
   const [showDetails, setShowDetails] = useState(false);
+  const [userAgent, setUserAgent] = useState<string>('');
   
   // Get error details from URL parameters
   const message = typeof router.query.message === 'string' ? router.query.message : 'An error occurred';
@@ -89,7 +90,13 @@ export default function ErrorPage() {
   };
   
   useEffect(() => {
+    // Only run client-side code after component is mounted
     checkSystemStatus();
+    
+    // Safely access browser APIs
+    if (typeof window !== 'undefined') {
+      setUserAgent(window.navigator.userAgent);
+    }
   }, []);
   
   const goToDashboard = () => {
@@ -108,9 +115,16 @@ export default function ErrorPage() {
     }
   };
   
+  // Simple styles that don't depend on complex theme handling
+  const bgColor = theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50';
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const cardBgColor = theme === 'dark' ? 'bg-gray-800' : 'bg-white';
+  const buttonBgColor = theme === 'dark' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-blue-500 hover:bg-blue-600';
+  const secondaryBgColor = theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300';
+  
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-4 ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-      <div className={`w-full max-w-2xl p-8 rounded-lg shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
+    <div className={`min-h-screen flex flex-col items-center justify-center p-4 ${bgColor} ${textColor}`}>
+      <div className={`w-full max-w-2xl p-8 rounded-lg shadow-lg ${cardBgColor}`}>
         <div className="flex items-center mb-6">
           <div className={`p-3 rounded-full mr-4 ${theme === 'dark' ? 'bg-red-900' : 'bg-red-100'}`}>
             <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${theme === 'dark' ? 'text-red-500' : 'text-red-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -174,7 +188,7 @@ export default function ErrorPage() {
               <p>Error Code: {errorCode || 'N/A'}</p>
               <p>Project ID: {projectId || 'N/A'}</p>
               <p>Timestamp: {timestamp}</p>
-              <p>Browser: {typeof window !== 'undefined' ? window.navigator.userAgent : 'Unknown'}</p>
+              {userAgent && <p>Browser: {userAgent}</p>}
             </div>
           )}
         </div>
@@ -182,32 +196,20 @@ export default function ErrorPage() {
         <div className="flex flex-wrap gap-2">
           <button 
             onClick={goBack}
-            className={`px-4 py-2 rounded transition-colors ${
-              theme === 'dark' ? 
-              'bg-gray-700 text-white hover:bg-gray-600' : 
-              'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
+            className={`px-4 py-2 rounded transition-colors text-white ${secondaryBgColor}`}
           >
             Go Back
           </button>
           <button 
             onClick={goToDashboard}
-            className={`px-4 py-2 rounded transition-colors ${
-              theme === 'dark' ? 
-              'bg-blue-600 text-white hover:bg-blue-500' : 
-              'bg-blue-500 text-white hover:bg-blue-600'
-            }`}
+            className={`px-4 py-2 rounded transition-colors text-white ${buttonBgColor}`}
           >
             Go to Dashboard
           </button>
           {projectId && (
             <button 
               onClick={goToProject}
-              className={`px-4 py-2 rounded transition-colors ${
-                theme === 'dark' ? 
-                'bg-blue-600 text-white hover:bg-blue-500' : 
-                'bg-blue-500 text-white hover:bg-blue-600'
-              }`}
+              className={`px-4 py-2 rounded transition-colors text-white ${buttonBgColor}`}
             >
               Go to Project
             </button>

@@ -1,3 +1,28 @@
+
+// Increase file handle limit
+const os = require('os');
+try {
+  // Only try to set limits on Unix-like systems
+  if (os.platform() !== 'win32') {
+    // Require the posix module only on Unix-like systems
+    const posix = require('posix');
+    
+    // Get current limits
+    const oldLimits = posix.getrlimit('nofile');
+    console.log('Current file handle limits:', oldLimits);
+    
+    // Set new limits - increase the soft limit to the hard limit
+    if (oldLimits.soft < oldLimits.hard) {
+      posix.setrlimit('nofile', { soft: oldLimits.hard, hard: oldLimits.hard });
+      const newLimits = posix.getrlimit('nofile');
+      console.log('New file handle limits:', newLimits);
+    }
+  }
+} catch (error) {
+  console.warn('Unable to set file handle limits:', error.message);
+  console.warn('This is not critical but might affect server performance under heavy load.');
+}
+
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
